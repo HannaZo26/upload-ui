@@ -16,24 +16,93 @@ type ShortUrlResult = {
   raw?: unknown;
 };
 
-const demoUsers: Record<string, DemoUserRecord> = {
+const demoUsers = {
+  haiyennt: {
+    password: "Hge&geTEg@ge123",
+    displayName: "Haiyen",
+    folders: [
+      "tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander",
+      "gjwmysteries","healthyliving","tastefulworld","feelgoodbeauty",
+      "worldtravelers","exclusivevisiondaily","freshpickstoday",
+      "dailytalktime","beyondheadlinesdaily"
+    ],
+    pages: [
+      "tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander",
+      "gjwmysteries","healthyliving","tastefulworld","feelgoodbeauty",
+      "worldtravelers","exclusivevisiondaily","freshpickstoday",
+      "dailytalktime","beyondheadlinesdaily"
+    ],
+  },
+
   hannah: {
-    password: "demo123",
+    password: "UhgTRg@kg$253",
     displayName: "Hannah",
-    folders: ["clearviewdaily", "dailytrendpulse", "flashbrieftoday", "horizonupdatesshow", "viewscopedaily"],
-    pages: ["clearviewdaily", "dailytrendpulse", "flashbrieftoday", "horizonupdatesshow", "viewscopedaily"],
+    folders: [
+      "tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander",
+      "gjwmysteries","healthyliving","tastefulworld","feelgoodbeauty",
+      "worldtravelers","exclusivevisiondaily","freshpickstoday",
+      "dailytalktime","beyondheadlinesdaily",
+      "clearviewdaily","viewscopedaily","dailytrendpulse",
+      "horizonupdatesshow","flashbrieftoday",
+      "everydayvitalityzh","healthyrhythmdaily",
+      "renaradar","renaradarzh","lukeinsights","heresthequestion"
+    ],
+    pages: [
+      "tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander",
+      "gjwmysteries","healthyliving","tastefulworld","feelgoodbeauty",
+      "worldtravelers","exclusivevisiondaily","freshpickstoday",
+      "dailytalktime","beyondheadlinesdaily",
+      "clearviewdaily","viewscopedaily","dailytrendpulse",
+      "horizonupdatesshow","flashbrieftoday",
+      "everydayvitalityzh","healthyrhythmdaily",
+      "renaradar","renaradarzh","lukeinsights","heresthequestion"
+    ],
   },
-  editor1: {
-    password: "demo123",
-    displayName: "Editor 1",
-    folders: ["clearviewdaily", "dailytrendpulse", "viewscopedaily"],
-    pages: ["clearviewdaily", "dailytrendpulse", "viewscopedaily"],
+
+  gjwmarketing: {
+    password: "jgGTR#kg$93",
+    displayName: "GJW Marketing",
+    folders: [
+      "tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander",
+      "gjwmysteries","healthyliving","tastefulworld","feelgoodbeauty",
+      "worldtravelers","exclusivevisiondaily","freshpickstoday",
+      "dailytalktime","beyondheadlinesdaily",
+      "clearviewdaily","viewscopedaily","dailytrendpulse",
+      "horizonupdatesshow","flashbrieftoday",
+      "everydayvitalityzh","healthyrhythmdaily",
+      "renaradar","renaradarzh","lukeinsights","heresthequestion"
+    ],
+    pages: [
+      "tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander",
+      "gjwmysteries","healthyliving","tastefulworld","feelgoodbeauty",
+      "worldtravelers","exclusivevisiondaily","freshpickstoday",
+      "dailytalktime","beyondheadlinesdaily",
+      "clearviewdaily","viewscopedaily","dailytrendpulse",
+      "horizonupdatesshow","flashbrieftoday",
+      "everydayvitalityzh","healthyrhythmdaily",
+      "renaradar","renaradarzh","lukeinsights","heresthequestion"
+    ],
   },
-  editor2: {
-    password: "demo123",
-    displayName: "Editor 2",
-    folders: ["viewscopedaily"],
-    pages: ["viewscopedaily"],
+
+  ying: {
+    password: "HGtYEG$eff@323",
+    displayName: "Ying",
+    folders: ["clearviewdaily","viewscopedaily","dailytrendpulse"],
+    pages: ["clearviewdaily","viewscopedaily","dailytrendpulse"],
+  },
+
+  ivyzhang: {
+    password: "ygeTTge$eff@#24",
+    displayName: "Ivy Zhang",
+    folders: ["everydayvitalityzh","healthyrhythmdaily"],
+    pages: ["everydayvitalityzh","healthyrhythmdaily"],
+  },
+
+  lucywang: {
+    password: "GhyTge#rge@87",
+    displayName: "Lucy Wang",
+    folders: ["horizonupdatesshow","flashbrieftoday"],
+    pages: ["horizonupdatesshow","flashbrieftoday"],
   },
 };
 
