@@ -46,7 +46,7 @@ export default function Page() {
   const [apiKey, setApiKey] = useState("");
   const [domainId, setDomainId] = useState("1");
   const [projectId, setProjectId] = useState("");
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState("https://n8n.influencerconnectagency.biz/webhook-test/upload-entry");
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState("https://n8n.influencerconnectagency.biz/webhook/upload-entry");
 
   const [targetUrl, setTargetUrl] = useState("");
   const [customSlug, setCustomSlug] = useState("");
