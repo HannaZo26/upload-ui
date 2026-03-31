@@ -1,0 +1,251 @@
+:root {
+  --bg: #f3f4f6;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --primary: #111827;
+  --primary-text: #ffffff;
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body { min-height: 100vh; }
+
+.page-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.centered {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 24px;
+}
+
+.main-column, .side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.badge {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+h1, h2 { margin: 0 0 8px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.user-line { font-weight: 700; }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.field input, .field select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.field.span-2 { grid-column: span 2; }
+
+.button {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  height: 42px;
+  padding: 0 16px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.button.primary {
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+.button.secondary {
+  background: white;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.button.small {
+  height: 34px;
+  font-size: 13px;
+}
+
+.button.full { width: 100%; }
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dropzone {
+  margin-top: 16px;
+  display: block;
+  border: 2px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 42px 16px;
+  text-align: center;
+  background: #fff;
+  cursor: pointer;
+}
+
+.drop-title {
+  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.hidden-file-input { display: none; }
+
+.summary {
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.file-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.file-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.file-name {
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.result-box, .demo-box {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: #fafafa;
+}
+
+.link-output {
+  margin: 8px 0 12px;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.alert {
+  border-radius: 14px;
+  padding: 14px 16px;
+  border: 1px solid;
+  font-size: 14px;
+}
+
+.alert.error {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+
+.alert.success {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
+
+.bullet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+}
+
+@media (max-width: 960px) {
+  .grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+  .field.span-2 { grid-column: span 1; }
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+}
