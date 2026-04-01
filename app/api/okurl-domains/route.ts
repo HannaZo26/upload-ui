@@ -21,8 +21,12 @@ export async function GET() {
 
     const rawDomains = Array.isArray(result.data?.domains)
       ? result.data.domains
+      : Array.isArray(result.data?.list)
+      ? result.data.list
       : Array.isArray(result.data?.data?.domains)
       ? result.data.data.domains
+      : Array.isArray(result.data?.data?.list)
+      ? result.data.data.list
       : Array.isArray(result.data?.data)
       ? result.data.data
       : [];
