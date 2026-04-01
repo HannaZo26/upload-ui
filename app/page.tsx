@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type DemoUser = {
   password: string;
@@ -112,9 +112,9 @@ const demoUsers: Record<string, DemoUser> = {
     ],
   },
 
-  gjwmarketing: {
+  gmarketing: {
     password: "jgGTR#kg$93",
-    displayName: "GJW Marketing",
+    displayName: "GMarketing",
     folders: [
       "tastefulworldzh",
       "feelgoodbeautyzh",
@@ -191,64 +191,6 @@ const demoUsers: Record<string, DemoUser> = {
   },
 };
 
-const OKURL_PROJECT_OPTIONS: OkurlProjectOption[] = [
-  { id: 1, name: "healthylivingzh" },
-  { id: 2, name: "tastefulworldzh" },
-  { id: 3, name: "feelgoodbeautyzh" },
-  { id: 4, name: "worldtravelerszh" },
-  { id: 5, name: "culturalwander" },
-  { id: 6, name: "healthyliving" },
-  { id: 7, name: "feelgoodbeauty" },
-  { id: 8, name: "worldtravelers" },
-  { id: 12, name: "tastefulworld" },
-  { id: 19, name: "beyondheadlinesdaily" },
-  { id: 20, name: "exclusivevisiondaily" },
-  { id: 21, name: "freshpickstoday" },
-  { id: 22, name: "dailytalktime" },
-  { id: 24, name: "gjwmysteries" },
-  { id: 33, name: "clearviewdaily" },
-  { id: 34, name: "horizonupdatesshow" },
-  { id: 35, name: "viewscopedaily" },
-  { id: 36, name: "dailytrendpulse" },
-  { id: 37, name: "flashbrieftoday" },
-  { id: 38, name: "renaradar" },
-  { id: 39, name: "lukeinsights" },
-  { id: 40, name: "renaradarzh" },
-  { id: 41, name: "healthyrhythmdaily" },
-  { id: 42, name: "everydayvitalityzh" },
-  { id: 43, name: "heresthequestion" },
-];
-
-const DEFAULT_PROJECT_NAME_BY_PAGE: Record<string, string> = {
-  clearviewdaily: "clearviewdaily",
-  dailytrendpulse: "dailytrendpulse",
-  flashbrieftoday: "flashbrieftoday",
-  horizonupdatesshow: "horizonupdatesshow",
-  viewscopedaily: "viewscopedaily",
-
-  tastefulworld: "tastefulworld",
-  feelgoodbeauty: "feelgoodbeauty",
-  worldtravelers: "worldtravelers",
-
-  tastefulworldzh: "tastefulworldzh",
-  feelgoodbeautyzh: "feelgoodbeautyzh",
-  worldtravelerszh: "worldtravelerszh",
-
-  healthyliving: "healthyliving",
-  culturalwander: "culturalwander",
-  gjwmysteries: "gjwmysteries",
-  exclusivevisiondaily: "exclusivevisiondaily",
-  freshpickstoday: "freshpickstoday",
-  dailytalktime: "dailytalktime",
-  beyondheadlinesdaily: "beyondheadlinesdaily",
-  everydayvitalityzh: "everydayvitalityzh",
-  healthyrhythmdaily: "healthyrhythmdaily",
-  renaradar: "renaradar",
-  renaradarzh: "renaradarzh",
-  lukeinsights: "lukeinsights",
-  heresthequestion: "heresthequestion",
-};
-
 export default function Page() {
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -269,12 +211,15 @@ export default function Page() {
   const [error, setError] = useState("");
 
   const [longUrl, setLongUrl] = useState("");
-  const [selectedProjectName, setSelectedProjectName] = useState("clearviewdaily");
   const [customSlug, setCustomSlug] = useState("");
   const [shortUrl, setShortUrl] = useState("");
   const [creatingShortUrl, setCreatingShortUrl] = useState(false);
   const [shortUrlError, setShortUrlError] = useState("");
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
+
+  const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -295,9 +240,58 @@ export default function Page() {
 
   const selectedProject = useMemo(() => {
     return (
-      OKURL_PROJECT_OPTIONS.find((item) => item.name === selectedProjectName) ?? null
+      okurlProjects.find((item) => String(item.id) === selectedProjectId) ?? null
     );
-  }, [selectedProjectName]);
+  }, [okurlProjects, selectedProjectId]);
+
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        setProjectsLoading(true);
+        const res = await fetch("/api/okurl-projects", {
+          cache: "no-store",
+        });
+        const data = await res.json();
+
+        const rawProjects = Array.isArray(data?.projects)
+          ? data.projects
+          : Array.isArray(data?.data?.projects)
+          ? data.data.projects
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+
+        const normalized: OkurlProjectOption[] = rawProjects
+          .map((item: any) => ({
+            id: Number(item?.id),
+            name: String(item?.name || "").trim(),
+          }))
+          .filter((item) => item.id && item.name)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setOkurlProjects(normalized);
+      } catch (err) {
+        console.error("Failed to load OKURL projects", err);
+      } finally {
+        setProjectsLoading(false);
+      }
+    };
+
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    if (!pageName || !okurlProjects.length) return;
+
+    const matched =
+      okurlProjects.find(
+        (item) => item.name.trim().toLowerCase() === pageName.trim().toLowerCase()
+      ) ?? null;
+
+    if (matched) {
+      setSelectedProjectId(String(matched.id));
+    }
+  }, [pageName, okurlProjects]);
 
   const resetUploadForm = () => {
     setFiles([]);
@@ -329,7 +323,6 @@ export default function Page() {
 
     const firstFolder = user.folders[0] ?? "";
     const firstPage = user.pages[0] ?? "";
-    const defaultProjectName = DEFAULT_PROJECT_NAME_BY_PAGE[firstPage] || OKURL_PROJECT_OPTIONS[0]?.name || "";
 
     setCurrentUser({
       username,
@@ -337,7 +330,6 @@ export default function Page() {
     });
     setFolderName(firstFolder);
     setPageName(firstPage);
-    setSelectedProjectName(defaultProjectName);
     setLoginPassword("");
   };
 
@@ -390,14 +382,6 @@ export default function Page() {
 
   const handlePageChange = (value: string) => {
     setPageName(value);
-    const suggestedProjectName =
-      DEFAULT_PROJECT_NAME_BY_PAGE[value] || selectedProjectName;
-    if (
-      suggestedProjectName &&
-      OKURL_PROJECT_OPTIONS.some((item) => item.name === suggestedProjectName)
-    ) {
-      setSelectedProjectName(suggestedProjectName);
-    }
   };
 
   const downloadTxt = () => {
@@ -444,7 +428,7 @@ export default function Page() {
       return;
     }
 
-    if (!selectedProject?.id) {
+    if (!selectedProjectId) {
       setShortUrlError("Please choose a valid OKURL project.");
       return;
     }
@@ -459,7 +443,7 @@ export default function Page() {
         },
         body: JSON.stringify({
           url: longUrl.trim(),
-          project_id: selectedProject.id,
+          project_id: Number(selectedProjectId),
           slug: customSlug.trim() || undefined,
         }),
       });
@@ -475,6 +459,7 @@ export default function Page() {
         data?.shortUrl ||
         data?.data?.short_url ||
         data?.data?.shortUrl ||
+        data?.data?.short ||
         data?.url ||
         "";
 
@@ -629,7 +614,7 @@ export default function Page() {
               <li>Enter original URL first</li>
               <li>Choose page destination</li>
               <li>Choose OKURL project manually</li>
-              <li>Generate and copy short URL</li>
+              <li>Generate short URL and copy it</li>
               <li>Paste short URL into TXT manually</li>
               <li>Download TXT and upload mp4 + txt together</li>
             </ul>
@@ -642,8 +627,8 @@ export default function Page() {
               <div style={styles.badge}>Admin Workspace</div>
               <h1 style={styles.title}>Content Upload Dashboard</h1>
               <p style={styles.subtitle}>
-                Enter the original URL, manually choose the OKURL project,
-                then generate a short link, prepare TXT content, and upload the video with the matching TXT file.
+                Enter the original URL, choose the OKURL project, generate a short link,
+                then prepare TXT content and upload the video with the matching TXT file.
               </p>
             </div>
           </div>
@@ -846,11 +831,14 @@ export default function Page() {
                         <label style={styles.label}>Project Name</label>
                         <select
                           style={styles.select}
-                          value={selectedProjectName}
-                          onChange={(e) => setSelectedProjectName(e.target.value)}
+                          value={selectedProjectId}
+                          onChange={(e) => setSelectedProjectId(e.target.value)}
                         >
-                          {OKURL_PROJECT_OPTIONS.map((project) => (
-                            <option key={project.id} value={project.name}>
+                          <option value="">
+                            {projectsLoading ? "Loading projects..." : "Choose project"}
+                          </option>
+                          {okurlProjects.map((project) => (
+                            <option key={project.id} value={String(project.id)}>
                               {project.name}
                             </option>
                           ))}
@@ -943,7 +931,7 @@ export default function Page() {
                     </div>
                     <div style={styles.summaryRow}>
                       <span>Project</span>
-                      <strong>{selectedProjectName || "-"}</strong>
+                      <strong>{selectedProject?.name || "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>project_id</span>
