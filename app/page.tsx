@@ -340,8 +340,9 @@ export default function Page() {
     const safeTitle = (txtTitle || title || "content")
       .trim()
       .replace(/[^\w\-]+/g, "_");
+
     a.href = url;
-    a.download = `${safeTitle || "content"}.txt`;
+    a.download = (safeTitle || "content") + ".txt";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -384,7 +385,7 @@ export default function Page() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey.trim()}`,
+          Authorization: "Bearer " + apiKey.trim(),
         },
         body: JSON.stringify(payload),
       });
@@ -457,7 +458,7 @@ export default function Page() {
       formData.append("domain_id", domainId);
 
       files.forEach((file, idx) => {
-        formData.append(`file_${idx + 1}`, file, file.name);
+        formData.append("file_" + String(idx + 1), file, file.name);
       });
 
       const res = await fetch(n8nWebhookUrl, {
@@ -475,7 +476,7 @@ export default function Page() {
       }
 
       if (!res.ok) {
-        throw new Error(data?.error || data?.message || `Upload failed (${res.status})`);
+        throw new Error(data?.error || data?.message || "Upload failed (" + String(res.status) + ")");
       }
 
       resetUploadForm();
@@ -625,7 +626,7 @@ export default function Page() {
 
                   <div style={styles.fileList}>
                     {files.map((file, idx) => (
-                      <div key={`${file.name}-${idx}`} style={styles.fileRow}>
+                      <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
                         <div>
                           <div style={styles.fileName}>{file.name}</div>
                           <div style={styles.fileMeta}>
