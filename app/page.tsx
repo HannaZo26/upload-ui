@@ -37,8 +37,13 @@ type OkurlProjectOption = {
   utmTemplates: UtmTemplateOption[];
 };
 
+type OkurlDomainOption = {
+  id: string;
+  domain: string;
+  pathPrefix: string;
+};
+
 const SHORT_LINK_DOMAIN = "gjw.us";
-const GJW_DOMAIN_ID = "1";
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -538,6 +543,7 @@ export default function Page() {
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
+  const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedUtmTemplateKey, setSelectedUtmTemplateKey] = useState("");
@@ -566,6 +572,14 @@ export default function Page() {
     );
   }, [okurlProjects, selectedProjectId]);
 
+  const selectedDomain = useMemo(() => {
+    return (
+      okurlDomains.find(
+        (item) => item.domain.trim().toLowerCase() === SHORT_LINK_DOMAIN
+      ) ?? null
+    );
+  }, [okurlDomains]);
+
   const selectedProjectTemplates = useMemo(() => {
     return selectedProject?.utmTemplates ?? [];
   }, [selectedProject]);
@@ -587,19 +601,69 @@ export default function Page() {
   }, [longUrl, utmFields]);
 
   useEffect(() => {
+    const loadDomains = async () => {
+      try {
+        const res = await fetch("/api/okurl-domains", {
+          cache: "no-store",
+        });
+
+        const data = await res.json();
+
+        const rawDomains = Array.isArray(data?.domains)
+          ? data.domains
+          : Array.isArray(data?.data?.domains)
+          ? data.data.domains
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+
+        const normalized: OkurlDomainOption[] = rawDomains
+          .map((item: any) => ({
+            id: pickFirstString(item?.id),
+            domain: pickFirstString(
+              item?.domain,
+              item?.name,
+              item?.host,
+              item?.new_domain
+            ),
+            pathPrefix: pickFirstString(item?.path_prefix, item?.pathPrefix, "s"),
+          }))
+          .filter((item) => item.id && item.domain);
+
+        setOkurlDomains(normalized);
+      } catch (err) {
+        console.error("Failed to load OKURL domains", err);
+      }
+    };
+
+    loadDomains();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedDomain?.id) return;
+
     const loadProjects = async () => {
       try {
         setProjectsLoading(true);
-        const res = await fetch("/api/okurl-projects", {
+        const domainQuery = selectedDomain?.id
+          ? `?domain_id=${encodeURIComponent(selectedDomain.id)}`
+          : "";
+        const res = await fetch(`/api/okurl-projects${domainQuery}`, {
           cache: "no-store",
         });
         const data = await res.json();
         let templateData: any = null;
 
         try {
-          const templateRes = await fetch("/api/okurl-utm-templates", {
-            cache: "no-store",
-          });
+          const templateQuery = selectedDomain?.id
+            ? `?domain_id=${encodeURIComponent(selectedDomain.id)}`
+            : "";
+          const templateRes = await fetch(
+            `/api/okurl-utm-templates${templateQuery}`,
+            {
+              cache: "no-store",
+            }
+          );
 
           if (templateRes.ok) {
             templateData = await templateRes.json();
@@ -676,7 +740,7 @@ export default function Page() {
     };
 
     loadProjects();
-  }, []);
+  }, [selectedDomain?.id]);
 
   useEffect(() => {
     if (!pageName || !okurlProjects.length) return;
@@ -870,6 +934,11 @@ export default function Page() {
       return;
     }
 
+    if (!selectedDomain?.id) {
+      setShortUrlError("OKURL domain gjw.us was not found.");
+      return;
+    }
+
     try {
       setCreatingShortUrl(true);
 
@@ -883,7 +952,8 @@ export default function Page() {
         body: JSON.stringify({
           url: urlForShortLink,
           project_id: Number(selectedProjectId),
-          domain_id: GJW_DOMAIN_ID,
+          domain_id: selectedDomain.id,
+          path_prefix: selectedDomain.pathPrefix || "s",
           slug: customSlug.trim() || undefined,
         }),
       });
@@ -902,17 +972,25 @@ export default function Page() {
         "";
 
       const generatedShortUrl =
+        data?.okurl ||
+        data?.data?.okurl ||
         data?.short_url ||
         data?.shortUrl ||
         data?.data?.short_url ||
         data?.data?.shortUrl ||
         data?.data?.short ||
-        data?.url ||
-        (returnedSlug ? `https://${SHORT_LINK_DOMAIN}/s/${returnedSlug}` : "") ||
+        (returnedSlug
+          ? `https://${SHORT_LINK_DOMAIN}/${selectedDomain.pathPrefix || "s"}/${returnedSlug}`
+          : "") ||
         "";
 
       if (!generatedShortUrl) {
-        throw new Error("Short URL was not returned.");
+        throw new Error(
+          data?.error ||
+            data?.upstream?.msg ||
+            data?.upstream?.code ||
+            "Short URL was not returned."
+        );
       }
 
       setShortUrl(normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN));
@@ -971,7 +1049,7 @@ export default function Page() {
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
       formData.append("okurl_domain", SHORT_LINK_DOMAIN);
-      formData.append("domain_id", GJW_DOMAIN_ID);
+      formData.append("domain_id", selectedDomain?.id || "");
       formData.append("utm_template", utmTemplate);
       formData.append("utm_source", utmFields.source);
       formData.append("utm_medium", utmFields.medium);
@@ -1361,6 +1439,9 @@ export default function Page() {
                             </option>
                           ))}
                         </select>
+                        <div style={styles.helperText}>
+                          Domain: {selectedDomain?.domain || SHORT_LINK_DOMAIN}
+                        </div>
                       </div>
 
                       <div style={styles.utmBuilderCard}>
@@ -1806,6 +1887,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontSize: 14,
     color: "#1d2a3b",
+  },
+  helperText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#607086",
   },
   input: {
     width: "100%",
