@@ -1,23 +1,44 @@
-export async function GET() {
+import { NextResponse } from "next/server";
+
+import { errorResponse, okurlPost, pickFirstString } from "../_okurl";
+
+const FALLBACK_DOMAIN_ID = "1";
+
+export async function GET(request: Request) {
   try {
-    const res = await fetch("https://okurl.io/v1/projects/list", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OKURL_API_KEY}`,
-      },
-      body: JSON.stringify({
-        domain_id: process.env.OKURL_DOMAIN_ID,
-      }),
+    const { searchParams } = new URL(request.url);
+    const domainId = pickFirstString(
+      searchParams.get("domain_id"),
+      FALLBACK_DOMAIN_ID
+    );
+
+    const result = await okurlPost("/projects/list", {
+      domain_id: domainId,
     });
 
-    const data = await res.json();
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error:
+            result.data?.msg ||
+            result.data?.code ||
+            "Failed to load OKURL projects.",
+          upstream: result.data,
+        },
+        { status: result.status || 500 }
+      );
+    }
 
-    return Response.json(data);
-  } catch (err: any) {
-    return Response.json(
-      { error: err.message || "Failed to fetch projects" },
-      { status: 500 }
-    );
+    const rawProjects = Array.isArray(result.data?.projects)
+      ? result.data.projects
+      : Array.isArray(result.data?.data?.projects)
+      ? result.data.data.projects
+      : Array.isArray(result.data?.data)
+      ? result.data.data
+      : [];
+
+    return NextResponse.json({ projects: rawProjects, upstream: result.data });
+  } catch (error) {
+    return errorResponse(error);
   }
 }
