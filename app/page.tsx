@@ -2,207 +2,248 @@
 
 import { useEffect, useState } from "react";
 
-export default function Page() {
-  const [projects, setProjects] = useState<any[]>([]);
-  const [utms, setUtms] = useState<any[]>([]);
+/** ====== USER 權限 ====== */
+const USERS = {
+  haiyennt: {
+    password: "Hge&geTEg@ge123",
+    pages: ["tastefulworldzh","feelgoodbeautyzh","worldtravelerszh","culturalwander"],
+  },
+  hannah: {
+    password: "UhgTRg@kg$253",
+    pages: ["clearviewdaily","viewscopedaily","dailytrendpulse","flashbrieftoday"],
+  },
+};
 
+/** ====== Page → Project mapping ====== */
+const PAGE_PROJECT_MAP: Record<string, string> = {
+  clearviewdaily: "8",
+  viewscopedaily: "9",
+  dailytrendpulse: "10",
+  flashbrieftoday: "11",
+};
+
+/** ====== UTM TEMPLATE（你可自由擴充）====== */
+const UTM_TEMPLATES = [
+  { id: "1", name: "Default FB Reel" },
+  { id: "2", name: "IG Traffic" },
+];
+
+export default function Page() {
+  const [user, setUser] = useState<any>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [page, setPage] = useState("");
   const [projectId, setProjectId] = useState("");
+
   const [utmId, setUtmId] = useState("");
+
   const [longUrl, setLongUrl] = useState("");
   const [shortUrl, setShortUrl] = useState("");
-
-  const [txt, setTxt] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-
-  const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ✅ Load OKURL Projects
-  useEffect(() => {
-    fetch("/api/okurl-projects")
-      .then(res => res.json())
-      .then(data => setProjects(data.projects || []));
-  }, []);
+  const [txt, setTxt] = useState("");
 
-  // ✅ Load UTM Templates
-  useEffect(() => {
-    fetch("/api/okurl-utms")
-      .then(res => res.json())
-      .then(data => setUtms(data.utms || []));
-  }, []);
+  const [files, setFiles] = useState<File[]>([]);
+  const [msg, setMsg] = useState("");
 
-  // ✅ Generate Short URL
+  /** ====== LOGIN ====== */
+  const handleLogin = () => {
+    const u = USERS[username as keyof typeof USERS];
+    if (!u || u.password !== password) {
+      alert("Login failed");
+      return;
+    }
+    setUser({ name: username, pages: u.pages });
+  };
+
+  /** ====== Page change → 自動帶 project ====== */
+  useEffect(() => {
+    if (page && PAGE_PROJECT_MAP[page]) {
+      setProjectId(PAGE_PROJECT_MAP[page]);
+    }
+  }, [page]);
+
+  /** ====== OKURL ====== */
   const generateShort = async () => {
-    setMsg("");
-
     if (!longUrl || !projectId || !utmId) {
-      setMsg("請填寫完整");
+      alert("請填完整");
       return;
     }
 
     setLoading(true);
+    setMsg("");
 
-    const res = await fetch("/api/okurl-create", {
-      method: "POST",
-      body: JSON.stringify({
-        url: longUrl,
-        project_id: Number(projectId),
-        utm_template_id: Number(utmId)
-      })
-    });
+    try {
+      const res = await fetch("/api/okurl-create", {
+        method: "POST",
+        body: JSON.stringify({
+          url: longUrl,
+          project_id: projectId,
+          utm_tpl_id: utmId, // 🔥 關鍵
+        }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    setLoading(false);
+      if (!res.ok) throw new Error(data.error || "error");
 
-    if (data.short_url) {
       setShortUrl(data.short_url);
-      setMsg("✅ Short URL 生成成功");
-    } else {
-      setMsg(data.error || "❌ 生成失敗");
+    } catch (e: any) {
+      setMsg(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ✅ Copy
-  const copy = async () => {
-    await navigator.clipboard.writeText(shortUrl);
-    setMsg("📋 已複製");
+  const copy = () => {
+    navigator.clipboard.writeText(shortUrl);
+    setMsg("Copied!");
   };
 
-  // ✅ TXT Download
+  /** ====== TXT ====== */
   const downloadTxt = () => {
     const blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "content.txt";
+    a.href = URL.createObjectURL(blob);
+    a.download = "caption.txt";
     a.click();
   };
 
+  /** ====== Upload ====== */
+  const upload = () => {
+    alert("Upload logic 接 n8n");
+  };
+
+  /** ====== LOGIN UI ====== */
+  if (!user) {
+    return (
+      <div className="centered">
+        <div className="card auth-card">
+          <h2>Sign in</h2>
+          <input placeholder="username" onChange={(e) => setUsername(e.target.value)} />
+          <input placeholder="password" type="password" onChange={(e) => setPassword(e.target.value)} />
+          <button className="button primary full" onClick={handleLogin}>
+            Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** ====== MAIN UI ====== */
   return (
-    <div className="flex min-h-screen bg-gray-100">
-
-      {/* LEFT SIDEBAR */}
-      <div className="w-64 bg-slate-900 text-white p-6">
-        <h2 className="text-xl font-bold mb-6">Upload Console</h2>
-
-        <div className="text-sm space-y-3">
-          <p>• Generate Short Link</p>
-          <p>• Create TXT</p>
-          <p>• Upload Files</p>
+    <div className="page-shell">
+      <div className="topbar">
+        <h1>Upload Console</h1>
+        <div>
+          <b>{user.name}</b>
         </div>
       </div>
 
-      {/* MAIN */}
-      <div className="flex-1 p-10 max-w-4xl">
+      <div className="grid">
+        {/* LEFT */}
+        <div className="main-column">
 
-        <h1 className="text-3xl font-bold mb-6">
-          Content Upload Dashboard
-        </h1>
+          {/* STEP 1 */}
+          <div className="card">
+            <h2>Step 1 - Upload Settings</h2>
 
-        {/* ================= OKURL ================= */}
-        <div className="bg-white p-6 rounded-xl shadow mb-6">
-          <h2 className="text-xl font-semibold mb-4">OKURL Generator</h2>
+            <div className="form-grid">
+              <div className="field">
+                <label>Page</label>
+                <select onChange={(e) => setPage(e.target.value)}>
+                  <option>Select</option>
+                  {user.pages.map((p: string) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
 
-          <input
-            placeholder="Original URL"
-            value={longUrl}
-            onChange={e => setLongUrl(e.target.value)}
-            className="w-full border p-2 rounded mb-3"
-          />
-
-          <select
-            value={projectId}
-            onChange={e => setProjectId(e.target.value)}
-            className="w-full border p-2 rounded mb-3"
-          >
-            <option value="">Select Project</option>
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={utmId}
-            onChange={e => setUtmId(e.target.value)}
-            className="w-full border p-2 rounded mb-4"
-          >
-            <option value="">Select UTM Template</option>
-            {utms.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={generateShort}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            {loading ? "Generating..." : "Generate Short URL"}
-          </button>
-
-          {shortUrl && (
-            <div className="mt-4 flex gap-2">
-              <input
-                value={shortUrl}
-                readOnly
-                className="flex-1 border p-2 rounded"
-              />
-              <button
-                onClick={copy}
-                className="bg-gray-800 text-white px-3 rounded"
-              >
-                Copy
-              </button>
+              <div className="field">
+                <label>Project ID</label>
+                <input value={projectId} readOnly />
+              </div>
             </div>
-          )}
-        </div>
-
-        {/* ================= TXT ================= */}
-        <div className="bg-white p-6 rounded-xl shadow mb-6">
-          <h2 className="text-xl font-semibold mb-4">TXT Generator</h2>
-
-          <textarea
-            value={txt}
-            onChange={e => setTxt(e.target.value)}
-            placeholder="輸入描述（建議貼 short link）"
-            className="w-full border p-3 rounded h-24 mb-3"
-          />
-
-          <button
-            onClick={downloadTxt}
-            className="bg-green-600 text-white px-4 py-2 rounded"
-          >
-            Download TXT
-          </button>
-        </div>
-
-        {/* ================= UPLOAD ================= */}
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-semibold mb-4">Upload Files</h2>
-
-          <input
-            type="file"
-            multiple
-            onChange={e => setFiles(Array.from(e.target.files || []))}
-            className="mb-3"
-          />
-
-          <div className="text-sm text-gray-600">
-            {files.length} files selected
           </div>
+
+          {/* STEP 2 OKURL */}
+          <div className="card">
+            <h2>OKURL Generator</h2>
+
+            <input
+              placeholder="Original URL"
+              onChange={(e) => setLongUrl(e.target.value)}
+            />
+
+            <select onChange={(e) => setUtmId(e.target.value)}>
+              <option>Select UTM Template</option>
+              {UTM_TEMPLATES.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+
+            <button className="button primary" onClick={generateShort}>
+              {loading ? "Generating..." : "Generate Short URL"}
+            </button>
+
+            {shortUrl && (
+              <div className="result-box">
+                <div className="link-output">{shortUrl}</div>
+                <button className="button secondary" onClick={copy}>
+                  Copy
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* STEP 3 TXT */}
+          <div className="card">
+            <h2>TXT Generator</h2>
+
+            <textarea
+              rows={3}
+              value={txt}
+              onChange={(e) => setTxt(e.target.value)}
+              placeholder="貼 short link + 描述"
+            />
+
+            <button className="button primary" onClick={downloadTxt}>
+              Download TXT
+            </button>
+          </div>
+
+          {/* STEP 4 Upload */}
+          <div className="card">
+            <h2>Upload Files</h2>
+
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files || []))}
+            />
+
+            <button className="button primary" onClick={upload}>
+              Upload
+            </button>
+          </div>
+
         </div>
 
-        {msg && (
-          <div className="mt-4 text-sm text-green-600">
-            {msg}
+        {/* RIGHT */}
+        <div className="side-column">
+          <div className="card">
+            <h2>Flow</h2>
+            <ul>
+              <li>1. 選 page</li>
+              <li>2. 生成 short link</li>
+              <li>3. 寫 TXT</li>
+              <li>4. 上傳</li>
+            </ul>
           </div>
-        )}
 
+          {msg && <div className="alert success">{msg}</div>}
+        </div>
       </div>
     </div>
   );
