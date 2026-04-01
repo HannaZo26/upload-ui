@@ -43,6 +43,13 @@ type OkurlDomainOption = {
   pathPrefix: string;
 };
 
+type ShortsClipOption = {
+  id: string;
+  title: string;
+  duration: string;
+  angle: string;
+};
+
 const SHORT_LINK_DOMAIN = "gjw.us";
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
@@ -52,6 +59,37 @@ const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   term: "",
   content: "",
   sourcePlatform: "",
+};
+
+const buildShortsOptions = (pageName: string): ShortsClipOption[] => {
+  const label = pageName || "content";
+
+  return [
+    {
+      id: "hook-cut",
+      title: `${label} Hook Cut`,
+      duration: "00:24",
+      angle: "Fast hook",
+    },
+    {
+      id: "story-cut",
+      title: `${label} Story Highlight`,
+      duration: "00:31",
+      angle: "Story beat",
+    },
+    {
+      id: "insight-cut",
+      title: `${label} Insight Moment`,
+      duration: "00:27",
+      angle: "Key takeaway",
+    },
+    {
+      id: "ending-cut",
+      title: `${label} Strong Ending`,
+      duration: "00:19",
+      angle: "Closing punch",
+    },
+  ];
 };
 
 const pickFirstString = (...values: unknown[]) => {
@@ -541,6 +579,12 @@ export default function Page() {
   const [creatingShortUrl, setCreatingShortUrl] = useState(false);
   const [shortUrlError, setShortUrlError] = useState("");
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
+  const [shortsSourceUrl, setShortsSourceUrl] = useState("");
+  const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
+  const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
+  const [generatingShorts, setGeneratingShorts] = useState(false);
+  const [shortsSuccess, setShortsSuccess] = useState("");
+  const [shortsError, setShortsError] = useState("");
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
@@ -781,6 +825,11 @@ export default function Page() {
     setCustomSlug("");
     setShortUrlError("");
     setShortUrlSuccess("");
+    setShortsSourceUrl("");
+    setShortsClips([]);
+    setSelectedShortIds([]);
+    setShortsSuccess("");
+    setShortsError("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -830,6 +879,11 @@ export default function Page() {
     setSelectedProjectId("");
     setSelectedUtmTemplateKey("");
     setUtmFields(EMPTY_UTM_FIELDS);
+    setShortsSourceUrl("");
+    setShortsClips([]);
+    setSelectedShortIds([]);
+    setShortsSuccess("");
+    setShortsError("");
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -883,6 +937,55 @@ export default function Page() {
       ...prev,
       [key]: value,
     }));
+  };
+
+  const generateShorts = async () => {
+    setShortsError("");
+    setShortsSuccess("");
+
+    if (!shortsSourceUrl.trim()) {
+      setShortsError("Please enter the long-video URL first.");
+      return;
+    }
+
+    try {
+      setGeneratingShorts(true);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const generatedClips = buildShortsOptions(pageName);
+      setShortsClips(generatedClips);
+      setSelectedShortIds(generatedClips.slice(0, 2).map((clip) => clip.id));
+      setShortsSuccess(
+        "Shorts preview is ready. API download can be connected here next."
+      );
+    } catch {
+      setShortsError("Failed to prepare the shorts preview.");
+    } finally {
+      setGeneratingShorts(false);
+    }
+  };
+
+  const toggleShortSelection = (clipId: string) => {
+    setSelectedShortIds((prev) =>
+      prev.includes(clipId)
+        ? prev.filter((id) => id !== clipId)
+        : [...prev, clipId]
+    );
+  };
+
+  const downloadSelectedShorts = () => {
+    setShortsError("");
+    setShortsSuccess("");
+
+    if (!selectedShortIds.length) {
+      setShortsError("Please select at least one short clip first.");
+      return;
+    }
+
+    setShortsSuccess(
+      `${selectedShortIds.length} short(s) selected. Download flow will connect to the Shorts Generator API next.`
+    );
   };
 
   const downloadTxt = () => {
@@ -1086,11 +1189,11 @@ export default function Page() {
 
       resetUploadForm();
       setSuccess(
-        data?.message || "Submitted to n8n successfully. Form has been cleared."
+        data?.message || "Automation started successfully. Form has been cleared."
       );
       setError("");
     } catch (err: any) {
-      setError(err?.message || "Submit failed.");
+      setError(err?.message || "Failed to start automation.");
       setSuccess("");
     } finally {
       setSubmitting(false);
@@ -1132,8 +1235,9 @@ export default function Page() {
               <li>Step 1: Choose page and folder destination</li>
               <li>Step 2: Generate the OKURL short link</li>
               <li>Step 3: Write and download the TXT file</li>
-              <li>Step 4: Upload the mp4 and matching txt</li>
-              <li>Step 5: Review the summary and submit to n8n</li>
+              <li>Step 4: Generate and review shorts</li>
+              <li>Step 5: Upload the mp4 and matching txt</li>
+              <li>Step 6: Review the summary and start automation</li>
             </ul>
           </div>
         </aside>
@@ -1143,10 +1247,6 @@ export default function Page() {
             <div>
               <div style={styles.badge}>Admin Workspace</div>
               <h1 style={styles.title}>Content Upload Dashboard</h1>
-              <p style={styles.subtitle}>
-                Enter the original URL, choose the OKURL project, generate a short link,
-                then prepare TXT content and upload the video with the matching TXT file.
-              </p>
             </div>
           </div>
 
@@ -1220,7 +1320,7 @@ export default function Page() {
                     </div>
 
                     <div>
-                      <label style={styles.label}>Google Drive Folder</label>
+                      <label style={styles.label}>Folder Name</label>
                       <select
                         style={styles.select}
                         value={folderName}
@@ -1479,6 +1579,123 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 4</div>
+                      <div style={styles.panelTitle}>Shorts generator</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.panelDesc}>
+                    Paste a long-video URL to prepare short clips here. This section is ready
+                    for the future Shorts Generator API connection.
+                  </div>
+
+                  <div style={styles.shortsPanel}>
+                    <div style={styles.formStack}>
+                      <div>
+                        <label style={styles.label}>Long video URL</label>
+                        <input
+                          style={styles.input}
+                          value={shortsSourceUrl}
+                          onChange={(e) => setShortsSourceUrl(e.target.value)}
+                          placeholder="Paste the long video URL here"
+                        />
+                        <div style={styles.helperText}>
+                          Future API:{" "}
+                          <a
+                            href="https://shortsgen.ganjingworld.com/"
+                            target="_blank"
+                            rel="noreferrer"
+                            style={styles.inlineLink}
+                          >
+                            shortsgen.ganjingworld.com
+                          </a>
+                        </div>
+                      </div>
+
+                      <div style={styles.inlineActions}>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.primaryButton,
+                            opacity: generatingShorts ? 0.7 : 1,
+                            cursor: generatingShorts ? "not-allowed" : "pointer",
+                          }}
+                          onClick={generateShorts}
+                          disabled={generatingShorts}
+                        >
+                          {generatingShorts ? "Generating..." : "Generate shorts"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={styles.shortsPreviewCard}>
+                      <div style={styles.shortsPreviewHeader}>
+                        <div style={styles.actionTitle}>Preview clips</div>
+                        <div style={styles.selectionPill}>
+                          {selectedShortIds.length} selected
+                        </div>
+                      </div>
+
+                      {shortsClips.length ? (
+                        <div style={styles.shortsClipList}>
+                          {shortsClips.map((clip) => {
+                            const selected = selectedShortIds.includes(clip.id);
+
+                            return (
+                              <label
+                                key={clip.id}
+                                style={{
+                                  ...styles.shortsClipCard,
+                                  borderColor: selected ? "#f29a3f" : "#d8e3f5",
+                                  background: selected ? "#fff3e6" : "#ffffff",
+                                }}
+                              >
+                                <div style={styles.shortClipCheckboxWrap}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() => toggleShortSelection(clip.id)}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={styles.shortsClipTitle}>{clip.title}</div>
+                                  <div style={styles.shortsClipMeta}>
+                                    {clip.duration} · {clip.angle}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={styles.shortsEmptyState}>
+                          Generate shorts to preview clip options and choose the best ones to
+                          download.
+                        </div>
+                      )}
+
+                      <div style={styles.inlineActions}>
+                        <button
+                          type="button"
+                          style={styles.secondaryButton}
+                          onClick={downloadSelectedShorts}
+                        >
+                          Download selected shorts
+                        </button>
+                      </div>
+
+                      {shortsSuccess ? (
+                        <div style={styles.successBox}>{shortsSuccess}</div>
+                      ) : null}
+
+                      {shortsError ? <div style={styles.errorBox}>{shortsError}</div> : null}
+                    </div>
+                  </div>
+                </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 5</div>
                       <div style={styles.panelTitle}>Upload files</div>
                     </div>
                   </div>
@@ -1538,13 +1755,13 @@ export default function Page() {
                 <section style={styles.panel}>
                   <div style={styles.sectionHeader}>
                     <div>
-                      <div style={styles.kicker}>Step 5</div>
-                      <div style={styles.panelTitle}>n8n Submission</div>
+                      <div style={styles.kicker}>Step 6</div>
+                      <div style={styles.panelTitle}>Start automation</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Review the current summary, then submit everything to n8n.
+                    Review the current summary, then start the automation.
                   </div>
 
                   <div style={styles.summaryCard}>
@@ -1587,7 +1804,7 @@ export default function Page() {
                       onClick={submitToN8n}
                       disabled={submitting}
                     >
-                      {submitting ? "Submitting..." : "Submit to n8n"}
+                      {submitting ? "Starting..." : "Start automation"}
                     </button>
                   </div>
 
@@ -1606,7 +1823,8 @@ export default function Page() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "#f4f7fb",
+    background:
+      "radial-gradient(circle at top left, #fff4e8 0%, #eef4ff 42%, #f7faff 100%)",
     color: "#132238",
     fontFamily:
       'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -1617,10 +1835,10 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
   },
   sidebar: {
-    background: "#0f1b2d",
+    background: "linear-gradient(180deg, #0a1c3d 0%, #14325d 100%)",
     color: "#eef4ff",
     padding: 24,
-    borderRight: "1px solid rgba(255,255,255,0.06)",
+    borderRight: "1px solid rgba(255,255,255,0.08)",
     display: "grid",
     alignContent: "start",
     gap: 18,
@@ -1635,8 +1853,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 14,
     height: 14,
     borderRadius: 999,
-    background: "#7da2ff",
-    boxShadow: "0 0 0 6px rgba(125,162,255,0.18)",
+    background: "#f28c28",
+    boxShadow: "0 0 0 6px rgba(242,140,40,0.18)",
   },
   logoTitle: {
     fontWeight: 800,
@@ -1648,8 +1866,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 2,
   },
   sidebarInfoCard: {
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.08)",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)",
+    border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: 18,
     padding: 16,
     marginBottom: 16,
@@ -1681,8 +1899,8 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
   navCard: {
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.06)",
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.08)",
     borderRadius: 18,
     padding: 16,
   },
@@ -1730,13 +1948,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   badge: {
     display: "inline-block",
-    background: "#e8efff",
-    color: "#3b5ccc",
+    background: "#fff1df",
+    color: "#b86407",
     fontWeight: 700,
     fontSize: 12,
     borderRadius: 999,
     padding: "6px 12px",
     marginBottom: 12,
+    border: "1px solid #ffd4a9",
   },
   title: {
     fontSize: 36,
@@ -1744,6 +1963,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontWeight: 800,
     letterSpacing: -0.8,
+    color: "#0d2242",
   },
   subtitle: {
     marginTop: 12,
@@ -1776,22 +1996,22 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
   },
   panel: {
-    background: "#ffffff",
-    border: "1px solid #e6ebf3",
+    background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
+    border: "1px solid #dce7f7",
     borderRadius: 24,
     padding: 24,
-    boxShadow: "0 8px 28px rgba(24, 39, 75, 0.05)",
+    boxShadow: "0 14px 36px rgba(17, 42, 79, 0.08)",
   },
   actionPanel: {
     background: "#ffffff",
-    border: "1px solid #e6ebf3",
+    border: "1px solid #dce7f7",
     borderRadius: 20,
     padding: 20,
-    boxShadow: "0 8px 28px rgba(24, 39, 75, 0.05)",
+    boxShadow: "0 14px 36px rgba(17, 42, 79, 0.08)",
   },
   summaryCard: {
-    background: "#fbfcfe",
-    border: "1px solid #e6ebf3",
+    background: "linear-gradient(180deg, #f8fbff 0%, #fffaf3 100%)",
+    border: "1px solid #dde8f7",
     borderRadius: 20,
     padding: 20,
   },
@@ -1806,7 +2026,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    color: "#7a8aa2",
+    color: "#c86d12",
     fontWeight: 700,
     marginBottom: 6,
   },
@@ -1814,14 +2034,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 28,
     fontWeight: 800,
     letterSpacing: -0.4,
+    color: "#0d2242",
   },
   actionTitle: {
     fontSize: 18,
     fontWeight: 800,
     marginBottom: 14,
+    color: "#0d2242",
   },
   panelDesc: {
-    color: "#64748b",
+    color: "#586a84",
     fontSize: 15,
     lineHeight: 1.6,
     marginBottom: 18,
@@ -1832,7 +2054,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   formGridTwo: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: 16,
   },
   formStack: {
@@ -1850,8 +2072,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
     padding: 16,
     borderRadius: 18,
-    border: "1px solid #d9e1ee",
-    background: "#fbfcfe",
+    border: "1px solid #d9e7f7",
+    background: "linear-gradient(180deg, #f7fbff 0%, #fffaf3 100%)",
   },
   utmBuilderHeader: {
     display: "flex",
@@ -1867,8 +2089,8 @@ const styles: Record<string, React.CSSProperties> = {
   utmBuilderBadge: {
     borderRadius: 999,
     padding: "6px 10px",
-    background: "#e8efff",
-    color: "#3b5ccc",
+    background: "#fff1df",
+    color: "#b86407",
     fontSize: 12,
     fontWeight: 700,
     whiteSpace: "nowrap",
@@ -1883,65 +2105,71 @@ const styles: Record<string, React.CSSProperties> = {
   helperText: {
     marginTop: 8,
     fontSize: 12,
-    color: "#607086",
+    color: "#587092",
+  },
+  inlineLink: {
+    color: "#d97706",
+    textDecoration: "none",
+    fontWeight: 700,
   },
   input: {
     width: "100%",
     borderRadius: 14,
-    border: "1px solid #d9e1ee",
+    border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
     outline: "none",
-    background: "#fbfcfe",
+    background: "#fbfdff",
     boxSizing: "border-box",
   },
   inputReadonly: {
     width: "100%",
     borderRadius: 14,
-    border: "1px solid #d9e1ee",
+    border: "1px solid #d9e4f4",
     padding: "13px 14px",
     fontSize: 15,
     outline: "none",
-    background: "#f3f6fb",
+    background: "#f3f7fd",
     color: "#4b5b72",
     boxSizing: "border-box",
   },
   select: {
     width: "100%",
     borderRadius: 14,
-    border: "1px solid #d9e1ee",
+    border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
     outline: "none",
-    background: "#fbfcfe",
+    background: "#fbfdff",
     boxSizing: "border-box",
   },
   textareaLarge: {
     width: "100%",
     minHeight: 96,
     borderRadius: 14,
-    border: "1px solid #d9e1ee",
+    border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
     outline: "none",
-    background: "#fbfcfe",
+    background: "#fbfdff",
     resize: "vertical",
     boxSizing: "border-box",
   },
   primaryButton: {
     border: "none",
-    background: "#10233f",
+    background: "linear-gradient(180deg, #ff9a3c 0%, #ea7c16 100%)",
     color: "#fff",
     borderRadius: 14,
     padding: "14px 18px",
     fontWeight: 800,
     fontSize: 15,
     cursor: "pointer",
+    boxShadow: "0 10px 24px rgba(234, 124, 22, 0.24)",
   },
   secondaryButton: {
-    border: "1px solid #d7dfec",
-    background: "#ffffff",
-    color: "#1c2a3d",
+    border: "1px solid #ffd3aa",
+    background: "#fff5ea",
+    color: "#b86407",
     borderRadius: 14,
     padding: "12px 16px",
     fontWeight: 700,
@@ -1950,11 +2178,11 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap",
   },
   dropzone: {
-    border: "2px dashed #cfd8e8",
+    border: "2px dashed #b7d1f0",
     borderRadius: 20,
     padding: "40px 18px",
     textAlign: "center",
-    background: "#f9fbff",
+    background: "linear-gradient(180deg, #eef6ff 0%, #e8f2ff 100%)",
     cursor: "pointer",
   },
   dropzoneTitle: {
@@ -1981,7 +2209,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: 16,
-    border: "1px solid #e6ebf3",
+    border: "1px solid #dce7f7",
     borderRadius: 16,
     padding: "14px 16px",
     background: "#ffffff",
@@ -2005,6 +2233,71 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     gap: 12,
     alignItems: "center",
+  },
+  shortsPanel: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: 20,
+    alignItems: "start",
+  },
+  shortsPreviewCard: {
+    background: "linear-gradient(180deg, #f7fbff 0%, #fffaf3 100%)",
+    border: "1px solid #d9e7f7",
+    borderRadius: 20,
+    padding: 20,
+  },
+  shortsPreviewHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 14,
+  },
+  selectionPill: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#e8f0ff",
+    color: "#214a8c",
+    fontSize: 12,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  shortsClipList: {
+    display: "grid",
+    gap: 12,
+  },
+  shortsClipCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    border: "1px solid #d8e3f5",
+    borderRadius: 16,
+    padding: "14px 16px",
+    cursor: "pointer",
+  },
+  shortClipCheckboxWrap: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shortsClipTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: "#0d2242",
+  },
+  shortsClipMeta: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#627590",
+  },
+  shortsEmptyState: {
+    borderRadius: 16,
+    border: "1px dashed #c9d9ef",
+    background: "#ffffff",
+    padding: "24px 18px",
+    color: "#5f7088",
+    fontSize: 14,
+    lineHeight: 1.6,
   },
   successBox: {
     marginTop: 16,
