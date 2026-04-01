@@ -9,6 +9,16 @@ type DemoUser = {
   pages: string[];
 };
 
+type CurrentUser = {
+  username: string;
+  displayName: string;
+};
+
+type OkurlProjectOption = {
+  id: number;
+  name: string;
+};
+
 const demoUsers: Record<string, DemoUser> = {
   haiyennt: {
     password: "Hge&geTEg@ge123",
@@ -181,43 +191,62 @@ const demoUsers: Record<string, DemoUser> = {
   },
 };
 
-const OKURL_PROJECT_MAP: Record<string, number> = {
-  clearviewdaily: 33,
-  dailytrendpulse: 36,
-  flashbrieftoday: 37,
-  horizonupdatesshow: 34,
-  viewscopedaily: 35,
+const OKURL_PROJECT_OPTIONS: OkurlProjectOption[] = [
+  { id: 1, name: "healthylivingzh" },
+  { id: 2, name: "tastefulworldzh" },
+  { id: 3, name: "feelgoodbeautyzh" },
+  { id: 4, name: "worldtravelerszh" },
+  { id: 5, name: "culturalwander" },
+  { id: 6, name: "healthyliving" },
+  { id: 7, name: "feelgoodbeauty" },
+  { id: 8, name: "worldtravelers" },
+  { id: 12, name: "tastefulworld" },
+  { id: 19, name: "beyondheadlinesdaily" },
+  { id: 20, name: "exclusivevisiondaily" },
+  { id: 21, name: "freshpickstoday" },
+  { id: 22, name: "dailytalktime" },
+  { id: 24, name: "gjwmysteries" },
+  { id: 33, name: "clearviewdaily" },
+  { id: 34, name: "horizonupdatesshow" },
+  { id: 35, name: "viewscopedaily" },
+  { id: 36, name: "dailytrendpulse" },
+  { id: 37, name: "flashbrieftoday" },
+  { id: 38, name: "renaradar" },
+  { id: 39, name: "lukeinsights" },
+  { id: 40, name: "renaradarzh" },
+  { id: 41, name: "healthyrhythmdaily" },
+  { id: 42, name: "everydayvitalityzh" },
+  { id: 43, name: "heresthequestion" },
+];
 
-  tastefulworld: 12,
-  feelgoodbeauty: 7,
-  worldtravelers: 8,
+const DEFAULT_PROJECT_NAME_BY_PAGE: Record<string, string> = {
+  clearviewdaily: "clearviewdaily",
+  dailytrendpulse: "dailytrendpulse",
+  flashbrieftoday: "flashbrieftoday",
+  horizonupdatesshow: "horizonupdatesshow",
+  viewscopedaily: "viewscopedaily",
 
-  tastefulworldzh: 2,
-  feelgoodbeautyzh: 3,
-  worldtravelerszh: 4,
+  tastefulworld: "tastefulworld",
+  feelgoodbeauty: "feelgoodbeauty",
+  worldtravelers: "worldtravelers",
 
-  healthyliving: 6,
-  healthylivingzh: 1,
+  tastefulworldzh: "tastefulworldzh",
+  feelgoodbeautyzh: "feelgoodbeautyzh",
+  worldtravelerszh: "worldtravelerszh",
 
-  culturalwander: 5,
-  gjwmysteries: 24,
-
-  exclusivevisiondaily: 20,
-  freshpickstoday: 21,
-  dailytalktime: 22,
-  beyondheadlinesdaily: 19,
-
-  everydayvitalityzh: 42,
-  healthyrhythmdaily: 41,
-  renaradar: 38,
-  renaradarzh: 40,
-  lukeinsights: 39,
-  heresthequestion: 43,
-};
-
-type CurrentUser = {
-  username: string;
-  displayName: string;
+  healthyliving: "healthyliving",
+  culturalwander: "culturalwander",
+  gjwmysteries: "gjwmysteries",
+  exclusivevisiondaily: "exclusivevisiondaily",
+  freshpickstoday: "freshpickstoday",
+  dailytalktime: "dailytalktime",
+  beyondheadlinesdaily: "beyondheadlinesdaily",
+  everydayvitalityzh: "everydayvitalityzh",
+  healthyrhythmdaily: "healthyrhythmdaily",
+  renaradar: "renaradar",
+  renaradarzh: "renaradarzh",
+  lukeinsights: "lukeinsights",
+  heresthequestion: "heresthequestion",
 };
 
 export default function Page() {
@@ -240,8 +269,9 @@ export default function Page() {
   const [error, setError] = useState("");
 
   const [longUrl, setLongUrl] = useState("");
-  const [shortUrl, setShortUrl] = useState("");
+  const [selectedProjectName, setSelectedProjectName] = useState("clearviewdaily");
   const [customSlug, setCustomSlug] = useState("");
+  const [shortUrl, setShortUrl] = useState("");
   const [creatingShortUrl, setCreatingShortUrl] = useState(false);
   const [shortUrlError, setShortUrlError] = useState("");
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
@@ -263,9 +293,11 @@ export default function Page() {
     return (total / 1024 / 1024).toFixed(2);
   }, [files]);
 
-  const currentProjectId = useMemo(() => {
-    return OKURL_PROJECT_MAP[pageName] ?? null;
-  }, [pageName]);
+  const selectedProject = useMemo(() => {
+    return (
+      OKURL_PROJECT_OPTIONS.find((item) => item.name === selectedProjectName) ?? null
+    );
+  }, [selectedProjectName]);
 
   const resetUploadForm = () => {
     setFiles([]);
@@ -295,15 +327,17 @@ export default function Page() {
       return;
     }
 
+    const firstFolder = user.folders[0] ?? "";
+    const firstPage = user.pages[0] ?? "";
+    const defaultProjectName = DEFAULT_PROJECT_NAME_BY_PAGE[firstPage] || OKURL_PROJECT_OPTIONS[0]?.name || "";
+
     setCurrentUser({
       username,
       displayName: user.displayName,
     });
-
-    const firstFolder = user.folders[0] ?? "";
-    const firstPage = user.pages[0] ?? "";
     setFolderName(firstFolder);
     setPageName(firstPage);
+    setSelectedProjectName(defaultProjectName);
     setLoginPassword("");
   };
 
@@ -354,6 +388,18 @@ export default function Page() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handlePageChange = (value: string) => {
+    setPageName(value);
+    const suggestedProjectName =
+      DEFAULT_PROJECT_NAME_BY_PAGE[value] || selectedProjectName;
+    if (
+      suggestedProjectName &&
+      OKURL_PROJECT_OPTIONS.some((item) => item.name === suggestedProjectName)
+    ) {
+      setSelectedProjectName(suggestedProjectName);
+    }
+  };
+
   const downloadTxt = () => {
     if (!txtDescription.trim()) {
       setError("Please enter TXT content before downloading.");
@@ -398,8 +444,8 @@ export default function Page() {
       return;
     }
 
-    if (!currentProjectId) {
-      setShortUrlError("No OKURL project is mapped for this page.");
+    if (!selectedProject?.id) {
+      setShortUrlError("Please choose a valid OKURL project.");
       return;
     }
 
@@ -413,7 +459,7 @@ export default function Page() {
         },
         body: JSON.stringify({
           url: longUrl.trim(),
-          project_id: currentProjectId,
+          project_id: selectedProject.id,
           slug: customSlug.trim() || undefined,
         }),
       });
@@ -582,10 +628,10 @@ export default function Page() {
             <ul style={styles.miniList}>
               <li>Enter original URL first</li>
               <li>Choose page destination</li>
-              <li>Generate short link if needed</li>
-              <li>Create and download TXT</li>
-              <li>Upload mp4 + txt together</li>
-              <li>Submit package to n8n</li>
+              <li>Choose OKURL project manually</li>
+              <li>Generate and copy short URL</li>
+              <li>Paste short URL into TXT manually</li>
+              <li>Download TXT and upload mp4 + txt together</li>
             </ul>
           </div>
         </aside>
@@ -596,8 +642,8 @@ export default function Page() {
               <div style={styles.badge}>Admin Workspace</div>
               <h1 style={styles.title}>Content Upload Dashboard</h1>
               <p style={styles.subtitle}>
-                Enter the original URL, generate a short link for the selected page,
-                then prepare TXT content and upload the video and matching TXT file together.
+                Enter the original URL, manually choose the OKURL project,
+                then generate a short link, prepare TXT content, and upload the video with the matching TXT file.
               </p>
             </div>
           </div>
@@ -652,7 +698,7 @@ export default function Page() {
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Choose the page destination first. The OKURL project will be detected automatically from the selected page.
+                    Choose the page destination folder first.
                   </div>
 
                   <div style={styles.formGridTwo}>
@@ -661,7 +707,7 @@ export default function Page() {
                       <select
                         style={styles.select}
                         value={pageName}
-                        onChange={(e) => setPageName(e.target.value)}
+                        onChange={(e) => handlePageChange(e.target.value)}
                       >
                         {availablePages.map((page) => (
                           <option key={page} value={page}>
@@ -797,13 +843,18 @@ export default function Page() {
                       </div>
 
                       <div>
-                        <label style={styles.label}>Detected project_id</label>
-                        <input
-                          style={styles.inputReadonly}
-                          value={currentProjectId ? String(currentProjectId) : ""}
-                          readOnly
-                          placeholder="No mapping found"
-                        />
+                        <label style={styles.label}>Project Name</label>
+                        <select
+                          style={styles.select}
+                          value={selectedProjectName}
+                          onChange={(e) => setSelectedProjectName(e.target.value)}
+                        >
+                          {OKURL_PROJECT_OPTIONS.map((project) => (
+                            <option key={project.id} value={project.name}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
@@ -813,16 +864,6 @@ export default function Page() {
                           value={customSlug}
                           onChange={(e) => setCustomSlug(e.target.value)}
                           placeholder="custom-slug"
-                        />
-                      </div>
-
-                      <div>
-                        <label style={styles.label}>Short URL</label>
-                        <input
-                          style={styles.inputReadonly}
-                          value={shortUrl}
-                          readOnly
-                          placeholder="Generated short link"
                         />
                       </div>
                     </div>
@@ -840,14 +881,25 @@ export default function Page() {
                       >
                         {creatingShortUrl ? "Generating..." : "Generate Short URL"}
                       </button>
+                    </div>
 
-                      <button
-                        type="button"
-                        style={styles.secondaryButton}
-                        onClick={copyShortUrl}
-                      >
-                        Copy
-                      </button>
+                    <div style={{ marginTop: 16 }}>
+                      <label style={styles.label}>Short URL</label>
+                      <div style={styles.shortUrlRow}>
+                        <input
+                          style={{ ...styles.inputReadonly, flex: 1 }}
+                          value={shortUrl}
+                          readOnly
+                          placeholder="Generated short link"
+                        />
+                        <button
+                          type="button"
+                          style={styles.secondaryButton}
+                          onClick={copyShortUrl}
+                        >
+                          Copy
+                        </button>
+                      </div>
                     </div>
 
                     {shortUrlSuccess ? (
@@ -890,8 +942,12 @@ export default function Page() {
                       <strong>{folderName || "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
+                      <span>Project</span>
+                      <strong>{selectedProjectName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
                       <span>project_id</span>
-                      <strong>{currentProjectId ?? "-"}</strong>
+                      <strong>{selectedProject?.id ?? "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>Files</span>
@@ -911,8 +967,9 @@ export default function Page() {
                     <div style={styles.actionTitle}>Notes</div>
                     <ul style={styles.miniList}>
                       <li>Enter original URL first</li>
-                      <li>Choose page to auto-map project_id</li>
-                      <li>Generate and copy short URL if needed</li>
+                      <li>Choose page destination</li>
+                      <li>Choose OKURL project manually</li>
+                      <li>Generate short URL and copy it</li>
                       <li>Paste short URL into TXT manually</li>
                       <li>Download TXT and upload mp4 + txt together</li>
                     </ul>
@@ -1220,6 +1277,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontSize: 14,
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   dropzone: {
     border: "2px dashed #cfd8e8",
@@ -1272,6 +1330,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
     flexWrap: "wrap",
     marginTop: 14,
+  },
+  shortUrlRow: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
   },
   successBox: {
     marginTop: 16,
