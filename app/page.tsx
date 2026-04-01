@@ -1111,46 +1111,29 @@ export default function Page() {
             </div>
 
             {currentUser ? (
-              <>
-                <div style={styles.sidebarInfoCard}>
-                  <div style={styles.sidebarInfoTitle}>Operator</div>
-                  <div style={styles.sidebarInfoName}>{currentUser.displayName}</div>
-                  <div style={styles.sidebarInfoSub}>
-                    Username: {currentUser.username}
-                  </div>
-                </div>
-
-                <div style={styles.sidebarInfoCard}>
-                  <div style={styles.sidebarInfoTitle}>Signed in</div>
-                  <div style={styles.sidebarInfoName}>
-                    {currentUser.displayName} ({currentUser.username})
-                  </div>
-                  <button
-                    style={{ ...styles.secondaryButton, width: "100%", marginTop: 12 }}
-                    onClick={handleLogout}
-                  >
-                    Log out
-                  </button>
-                </div>
-              </>
+              <div style={styles.sidebarInfoCard}>
+                <div style={styles.sidebarInfoTitle}>Operator</div>
+                <div style={styles.sidebarInfoName}>{currentUser.displayName}</div>
+                <div style={styles.sidebarInfoSub}>Username: {currentUser.username}</div>
+                <div style={styles.sidebarInfoMeta}>Signed in and ready to upload</div>
+                <button
+                  style={{ ...styles.secondaryButton, width: "100%", marginTop: 12 }}
+                  onClick={handleLogout}
+                >
+                  Log out
+                </button>
+              </div>
             ) : null}
           </div>
 
           <div style={styles.navCard}>
-            <div style={styles.navSectionTitle}>Workflow</div>
-            <div style={styles.navItemActive}>Upload workspace</div>
-            <div style={styles.navItem}>TXT generator</div>
-            <div style={styles.navItem}>Short link tools</div>
-          </div>
-
-          <div style={styles.navCard}>
-            <div style={styles.navSectionTitle}>Current flow</div>
+            <div style={styles.navSectionTitle}>Steps</div>
             <ul style={styles.miniList}>
-              <li>Choose page and folder destination</li>
-              <li>Generate the OKURL short link</li>
-              <li>Write and download the TXT file</li>
-              <li>Upload the mp4 and matching txt</li>
-              <li>Review the summary and submit to n8n</li>
+              <li>Step 1: Choose page and folder destination</li>
+              <li>Step 2: Generate the OKURL short link</li>
+              <li>Step 3: Write and download the TXT file</li>
+              <li>Step 4: Upload the mp4 and matching txt</li>
+              <li>Step 5: Review the summary and submit to n8n</li>
             </ul>
           </div>
         </aside>
@@ -1612,21 +1595,6 @@ export default function Page() {
                   {error ? <div style={styles.errorBox}>{error}</div> : null}
                 </section>
               </div>
-
-              <aside style={styles.actionColumn}>
-                <div style={styles.actionStack}>
-                  <section style={styles.actionPanel}>
-                    <div style={styles.actionTitle}>Notes</div>
-                    <ul style={styles.miniList}>
-                      <li>Step 1: Choose page and folder destination</li>
-                      <li>Step 2: Generate the OKURL short link</li>
-                      <li>Step 3: Write and download the TXT file</li>
-                      <li>Step 4: Upload the mp4 and matching txt</li>
-                      <li>Step 5: Review the summary and submit to n8n</li>
-                    </ul>
-                  </section>
-                </div>
-              </aside>
             </div>
           )}
         </div>
@@ -1704,6 +1672,12 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 6,
     fontSize: 13,
     color: "#c1d2ef",
+    lineHeight: 1.5,
+  },
+  sidebarInfoMeta: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "#8fa4c7",
     lineHeight: 1.5,
   },
   navCard: {
@@ -1784,7 +1758,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   workspace: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1.6fr) 360px",
+    gridTemplateColumns: "minmax(0, 1fr)",
     gap: 22,
     alignItems: "start",
   },
