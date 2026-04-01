@@ -14,14 +14,329 @@ type CurrentUser = {
   displayName: string;
 };
 
+type UtmBuilderFields = {
+  source: string;
+  medium: string;
+  campaign: string;
+  term: string;
+  content: string;
+  sourcePlatform: string;
+};
+
+type UtmTemplateOption = {
+  key: string;
+  label: string;
+  fields: UtmBuilderFields;
+};
+
 type OkurlProjectOption = {
   id: number;
   name: string;
-  utmTemplate?: string;
+  domainId?: string;
+  utmTemplateId?: string;
+  utmTemplates: UtmTemplateOption[];
 };
 
-const buildDefaultUtmTemplate = (projectName: string) =>
-  `?utm_source=${projectName}&utm_medium=social&utm_campaign={campaign_name}&utm_content={content_name}`;
+const SHORT_LINK_DOMAIN = "gjw.us";
+
+const EMPTY_UTM_FIELDS: UtmBuilderFields = {
+  source: "",
+  medium: "",
+  campaign: "",
+  term: "",
+  content: "",
+  sourcePlatform: "",
+};
+
+const pickFirstString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return "";
+};
+
+const buildCampaignSlug = (projectName: string) => {
+  const normalized = projectName
+    .replace(/^creators[_\s-]*/i, "")
+    .replace(/[_\s-]+(en|zh|cn)$/i, "")
+    .replace(/[^a-zA-Z0-9]+/g, "");
+
+  return normalized.toLowerCase();
+};
+
+const buildDefaultUtmFields = (projectName: string): UtmBuilderFields => ({
+  source: "mkg",
+  medium: "video",
+  campaign: buildCampaignSlug(projectName),
+  term: "news",
+  content: "reels",
+  sourcePlatform: "fb",
+});
+
+const parseUtmQueryString = (value: string): Partial<UtmBuilderFields> => {
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+
+  let params = new URLSearchParams();
+
+  try {
+    if (trimmed.includes("://")) {
+      params = new URL(trimmed).searchParams;
+    } else {
+      const normalized = trimmed.startsWith("?")
+        ? trimmed.slice(1)
+        : trimmed.includes("?")
+        ? trimmed.split("?").slice(1).join("?")
+        : trimmed;
+      params = new URLSearchParams(normalized);
+    }
+  } catch {
+    const normalized = trimmed.startsWith("?")
+      ? trimmed.slice(1)
+      : trimmed.includes("?")
+      ? trimmed.split("?").slice(1).join("?")
+      : trimmed;
+    params = new URLSearchParams(normalized);
+  }
+
+  return {
+    source: pickFirstString(params.get("utm_source")),
+    medium: pickFirstString(params.get("utm_medium")),
+    campaign: pickFirstString(params.get("utm_campaign")),
+    term: pickFirstString(params.get("utm_term")),
+    content: pickFirstString(params.get("utm_content")),
+    sourcePlatform: pickFirstString(params.get("utm_source_platform")),
+  };
+};
+
+const normalizeUtmFields = (
+  projectName: string,
+  partial?: Partial<UtmBuilderFields>
+): UtmBuilderFields => {
+  const fallback = buildDefaultUtmFields(projectName);
+
+  return {
+    source: pickFirstString(partial?.source, fallback.source),
+    medium: pickFirstString(partial?.medium, fallback.medium),
+    campaign: pickFirstString(partial?.campaign, fallback.campaign),
+    term: pickFirstString(partial?.term, fallback.term),
+    content: pickFirstString(partial?.content, fallback.content),
+    sourcePlatform: pickFirstString(
+      partial?.sourcePlatform,
+      fallback.sourcePlatform
+    ),
+  };
+};
+
+const readTemplateFieldsFromObject = (
+  projectName: string,
+  value: Record<string, any>
+): UtmBuilderFields => {
+  const fromQuery = parseUtmQueryString(
+    pickFirstString(
+      value?.utm_template,
+      value?.utmTemplate,
+      value?.template,
+      value?.query,
+      value?.url
+    )
+  );
+
+  return normalizeUtmFields(projectName, {
+    source: pickFirstString(
+      value?.utm_source,
+      value?.utmSource,
+      value?.source,
+      value?.fields?.utm_source,
+      value?.fields?.utmSource,
+      value?.fields?.source
+    ),
+    medium: pickFirstString(
+      value?.utm_medium,
+      value?.utmMedium,
+      value?.medium,
+      value?.fields?.utm_medium,
+      value?.fields?.utmMedium,
+      value?.fields?.medium
+    ),
+    campaign: pickFirstString(
+      value?.utm_campaign,
+      value?.utmCampaign,
+      value?.campaign,
+      value?.fields?.utm_campaign,
+      value?.fields?.utmCampaign,
+      value?.fields?.campaign
+    ),
+    term: pickFirstString(
+      value?.utm_term,
+      value?.utmTerm,
+      value?.term,
+      value?.fields?.utm_term,
+      value?.fields?.utmTerm,
+      value?.fields?.term
+    ),
+    content: pickFirstString(
+      value?.utm_content,
+      value?.utmContent,
+      value?.content,
+      value?.fields?.utm_content,
+      value?.fields?.utmContent,
+      value?.fields?.content
+    ),
+    sourcePlatform: pickFirstString(
+      value?.utm_source_platform,
+      value?.utmSourcePlatform,
+      value?.source_platform,
+      value?.sourcePlatform,
+      value?.platform,
+      value?.fields?.utm_source_platform,
+      value?.fields?.utmSourcePlatform,
+      value?.fields?.source_platform,
+      value?.fields?.sourcePlatform,
+      value?.fields?.platform
+    ),
+    ...fromQuery,
+  });
+};
+
+const normalizeTemplateOption = (
+  projectName: string,
+  rawTemplate: any,
+  index: number
+): UtmTemplateOption => {
+  const label =
+    pickFirstString(
+      rawTemplate?.label,
+      rawTemplate?.name,
+      rawTemplate?.title,
+      rawTemplate?.template_name,
+      rawTemplate?.templateName
+    ) || `Template ${index + 1}`;
+
+  if (typeof rawTemplate === "string") {
+    return {
+      key: `${label}-${index}`,
+      label,
+      fields: normalizeUtmFields(projectName, parseUtmQueryString(rawTemplate)),
+    };
+  }
+
+  return {
+    key: `${label}-${index}`,
+    label,
+    fields: readTemplateFieldsFromObject(projectName, rawTemplate || {}),
+  };
+};
+
+const extractUtmTemplates = (
+  projectName: string,
+  rawProject: any
+): UtmTemplateOption[] => {
+  const rawTemplates =
+    rawProject?.utm_templates ||
+    rawProject?.utmTemplates ||
+    rawProject?.utm_builder?.templates ||
+    rawProject?.utmBuilder?.templates ||
+    rawProject?.templates ||
+    null;
+
+  if (Array.isArray(rawTemplates) && rawTemplates.length) {
+    return rawTemplates.map((template, index) =>
+      normalizeTemplateOption(projectName, template, index)
+    );
+  }
+
+  const directTemplateValue =
+    rawProject?.utm_builder ||
+    rawProject?.utmBuilder ||
+    rawProject?.utm_template ||
+    rawProject?.utmTemplate ||
+    rawProject?.utm_template_url ||
+    rawProject?.utmTemplateUrl ||
+    rawProject?.default_template ||
+    rawProject?.defaultTemplate ||
+    null;
+
+  if (directTemplateValue) {
+    return [
+      normalizeTemplateOption(projectName, directTemplateValue, 0),
+    ];
+  }
+
+  return [
+    {
+      key: "default-0",
+      label: "Default Template",
+      fields: buildDefaultUtmFields(projectName),
+    },
+  ];
+};
+
+const buildUtmQueryString = (fields: UtmBuilderFields) => {
+  const params = new URLSearchParams();
+
+  if (fields.source.trim()) params.set("utm_source", fields.source.trim());
+  if (fields.medium.trim()) params.set("utm_medium", fields.medium.trim());
+  if (fields.campaign.trim()) params.set("utm_campaign", fields.campaign.trim());
+  if (fields.term.trim()) params.set("utm_term", fields.term.trim());
+  if (fields.content.trim()) params.set("utm_content", fields.content.trim());
+  if (fields.sourcePlatform.trim()) {
+    params.set("utm_source_platform", fields.sourcePlatform.trim());
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+const buildUrlWithUtm = (baseUrl: string, fields: UtmBuilderFields) => {
+  const trimmed = baseUrl.trim();
+  if (!trimmed) return "";
+
+  const params = new URLSearchParams();
+
+  if (fields.source.trim()) params.set("utm_source", fields.source.trim());
+  if (fields.medium.trim()) params.set("utm_medium", fields.medium.trim());
+  if (fields.campaign.trim()) params.set("utm_campaign", fields.campaign.trim());
+  if (fields.term.trim()) params.set("utm_term", fields.term.trim());
+  if (fields.content.trim()) params.set("utm_content", fields.content.trim());
+  if (fields.sourcePlatform.trim()) {
+    params.set("utm_source_platform", fields.sourcePlatform.trim());
+  }
+
+  if (!params.toString()) {
+    return trimmed;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    params.forEach((value, key) => {
+      url.searchParams.set(key, value);
+    });
+    return url.toString();
+  } catch {
+    return `${trimmed}${trimmed.includes("?") ? "&" : "?"}${params.toString()}`;
+  }
+};
+
+const normalizeShortUrlToDomain = (value: string, domain: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.protocol = "https:";
+    parsed.host = domain;
+    return parsed.toString();
+  } catch {
+    const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    return `https://${domain}${normalizedPath}`;
+  }
+};
 
 const demoUsers: Record<string, DemoUser> = {
   haiyennt: {
@@ -224,7 +539,8 @@ export default function Page() {
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-  const [utmTemplate, setUtmTemplate] = useState("");
+  const [selectedUtmTemplateKey, setSelectedUtmTemplateKey] = useState("");
+  const [utmFields, setUtmFields] = useState<UtmBuilderFields>(EMPTY_UTM_FIELDS);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -249,6 +565,26 @@ export default function Page() {
     );
   }, [okurlProjects, selectedProjectId]);
 
+  const selectedProjectTemplates = useMemo(() => {
+    return selectedProject?.utmTemplates ?? [];
+  }, [selectedProject]);
+
+  const selectedUtmTemplate = useMemo(() => {
+    return (
+      selectedProjectTemplates.find(
+        (item) => item.key === selectedUtmTemplateKey
+      ) ?? null
+    );
+  }, [selectedProjectTemplates, selectedUtmTemplateKey]);
+
+  const utmTemplate = useMemo(() => {
+    return buildUtmQueryString(utmFields);
+  }, [utmFields]);
+
+  const longUrlWithUtm = useMemo(() => {
+    return buildUrlWithUtm(longUrl, utmFields);
+  }, [longUrl, utmFields]);
+
   useEffect(() => {
     const loadProjects = async () => {
       try {
@@ -257,6 +593,19 @@ export default function Page() {
           cache: "no-store",
         });
         const data = await res.json();
+        let templateData: any = null;
+
+        try {
+          const templateRes = await fetch("/api/okurl-utm-templates", {
+            cache: "no-store",
+          });
+
+          if (templateRes.ok) {
+            templateData = await templateRes.json();
+          }
+        } catch (templateErr) {
+          console.warn("Failed to load OKURL UTM templates", templateErr);
+        }
 
         const rawProjects = Array.isArray(data?.projects)
           ? data.projects
@@ -266,19 +615,54 @@ export default function Page() {
           ? data.data
           : [];
 
+        const embeddedTemplates = Array.isArray(data?.templates)
+          ? data.templates
+          : Array.isArray(data?.data?.templates)
+          ? data.data.templates
+          : [];
+
+        const fetchedTemplates = Array.isArray(templateData?.templates)
+          ? templateData.templates
+          : Array.isArray(templateData?.data?.templates)
+          ? templateData.data.templates
+          : Array.isArray(templateData?.data)
+          ? templateData.data
+          : [];
+
+        const rawTemplateById = new Map<string, any>();
+
+        [...embeddedTemplates, ...fetchedTemplates].forEach((item: any) => {
+          const templateId = pickFirstString(item?.id);
+          if (templateId) {
+            rawTemplateById.set(templateId, item);
+          }
+        });
+
         const normalized: OkurlProjectOption[] = rawProjects
-          .map((item: any) => ({
-            id: Number(item?.id),
-            name: String(item?.name || "").trim(),
-            utmTemplate: String(
-              item?.utm_template ||
-                item?.utmTemplate ||
-                item?.utm_template_url ||
-                item?.utmTemplateUrl ||
-                item?.utm_builder ||
-                ""
-            ).trim(),
-          }))
+          .map((item: any) => {
+            const projectName = String(item?.name || "").trim();
+            const utmTemplateId = pickFirstString(
+              item?.utm_tpl_id,
+              item?.utmTemplateId,
+              item?.utm_template_id
+            );
+            const linkedTemplate =
+              (utmTemplateId && rawTemplateById.get(utmTemplateId)) || null;
+
+            return {
+              id: Number(item?.id),
+              name: projectName,
+              domainId: pickFirstString(
+                item?.domain_id,
+                item?.domainId,
+                item?.domain?.id
+              ),
+              utmTemplateId,
+              utmTemplates: linkedTemplate
+                ? [normalizeTemplateOption(projectName, linkedTemplate, 0)]
+                : extractUtmTemplates(projectName, item),
+            };
+          })
           .filter((item) => item.id && item.name)
           .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -308,14 +692,20 @@ export default function Page() {
 
   useEffect(() => {
     if (!selectedProject) {
-      setUtmTemplate("");
+      setSelectedUtmTemplateKey("");
+      setUtmFields(EMPTY_UTM_FIELDS);
       return;
     }
 
-    setUtmTemplate(
-      selectedProject.utmTemplate?.trim() ||
-        buildDefaultUtmTemplate(selectedProject.name)
-    );
+    const firstTemplate =
+      selectedProject.utmTemplates[0] ?? {
+        key: "default-0",
+        label: "Default Template",
+        fields: buildDefaultUtmFields(selectedProject.name),
+      };
+
+    setSelectedUtmTemplateKey(firstTemplate.key);
+    setUtmFields(firstTemplate.fields);
   }, [selectedProject]);
 
   const resetUploadForm = () => {
@@ -373,7 +763,8 @@ export default function Page() {
     setShortUrlError("");
     setShortUrlSuccess("");
     setSelectedProjectId("");
-    setUtmTemplate("");
+    setSelectedUtmTemplateKey("");
+    setUtmFields(EMPTY_UTM_FIELDS);
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -409,6 +800,24 @@ export default function Page() {
 
   const handlePageChange = (value: string) => {
     setPageName(value);
+  };
+
+  const handleUtmTemplateChange = (templateKey: string) => {
+    setSelectedUtmTemplateKey(templateKey);
+
+    const matchedTemplate =
+      selectedProjectTemplates.find((item) => item.key === templateKey) ?? null;
+
+    if (matchedTemplate) {
+      setUtmFields(matchedTemplate.fields);
+    }
+  };
+
+  const updateUtmField = (key: keyof UtmBuilderFields, value: string) => {
+    setUtmFields((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
   };
 
   const downloadTxt = () => {
@@ -463,14 +872,27 @@ export default function Page() {
     try {
       setCreatingShortUrl(true);
 
+      const urlForShortLink = longUrlWithUtm || longUrl.trim();
+
       const res = await fetch("/api/okurl-create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          url: longUrl.trim(),
+          url: urlForShortLink,
           project_id: Number(selectedProjectId),
+          domain: SHORT_LINK_DOMAIN,
+          domain_id: selectedProject?.domainId || undefined,
+          utm_tpl_id: selectedProject?.utmTemplateId || undefined,
+          utm_template_id: selectedProject?.utmTemplateId || undefined,
+          utm_template: utmTemplate || undefined,
+          utm_source: utmFields.source.trim() || undefined,
+          utm_medium: utmFields.medium.trim() || undefined,
+          utm_campaign: utmFields.campaign.trim() || undefined,
+          utm_term: utmFields.term.trim() || undefined,
+          utm_content: utmFields.content.trim() || undefined,
+          utm_source_platform: utmFields.sourcePlatform.trim() || undefined,
           slug: customSlug.trim() || undefined,
         }),
       });
@@ -481,6 +903,13 @@ export default function Page() {
         throw new Error(data?.error || data?.message || "Failed to generate short URL.");
       }
 
+      const returnedSlug =
+        data?.slug ||
+        data?.data?.slug ||
+        data?.short_code ||
+        data?.data?.short_code ||
+        "";
+
       const generatedShortUrl =
         data?.short_url ||
         data?.shortUrl ||
@@ -488,14 +917,15 @@ export default function Page() {
         data?.data?.shortUrl ||
         data?.data?.short ||
         data?.url ||
+        (returnedSlug ? `https://${SHORT_LINK_DOMAIN}/s/${returnedSlug}` : "") ||
         "";
 
       if (!generatedShortUrl) {
         throw new Error("Short URL was not returned.");
       }
 
-      setShortUrl(generatedShortUrl);
-      setShortUrlSuccess("Short URL generated successfully.");
+      setShortUrl(normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN));
+      setShortUrlSuccess("Short URL generated successfully with gjw.us.");
     } catch (err: any) {
       setShortUrlError(err?.message || "Failed to generate short URL.");
     } finally {
@@ -545,10 +975,18 @@ export default function Page() {
       formData.append("page_name", pageName);
       formData.append("folder_name", folderName);
       formData.append("title", "");
-      formData.append("target_url", "");
-      formData.append("notes", "");
+      formData.append("target_url", longUrlWithUtm || longUrl);
+      formData.append("notes", txtDescription);
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
+      formData.append("okurl_domain", SHORT_LINK_DOMAIN);
+      formData.append("utm_template", utmTemplate);
+      formData.append("utm_source", utmFields.source);
+      formData.append("utm_medium", utmFields.medium);
+      formData.append("utm_campaign", utmFields.campaign);
+      formData.append("utm_term", utmFields.term);
+      formData.append("utm_content", utmFields.content);
+      formData.append("utm_source_platform", utmFields.sourcePlatform);
 
       files.forEach((file, idx) => {
         formData.append("file_" + String(idx + 1), file, file.name);
@@ -873,15 +1311,119 @@ export default function Page() {
                         </select>
                       </div>
 
-                      <div>
-                        <label style={styles.label}>UTM Template</label>
-                        <textarea
-                          rows={3}
-                          style={styles.textareaLarge}
-                          value={utmTemplate}
-                          onChange={(e) => setUtmTemplate(e.target.value)}
-                          placeholder="Choose a project to load its UTM template"
-                        />
+                      <div style={styles.utmBuilderCard}>
+                        <div style={styles.utmBuilderHeader}>
+                          <div style={styles.utmBuilderTitle}>UTM Builder</div>
+                          <div style={styles.utmBuilderBadge}>
+                            {selectedUtmTemplate?.label || "Auto"}
+                          </div>
+                        </div>
+
+                        <div style={styles.formStack}>
+                          <div>
+                            <label style={styles.label}>UTM Template</label>
+                            <select
+                              style={styles.select}
+                              value={selectedUtmTemplateKey}
+                              onChange={(e) => handleUtmTemplateChange(e.target.value)}
+                            >
+                              <option value="">
+                                {selectedProject
+                                  ? "Select UTM template"
+                                  : "Choose project first"}
+                              </option>
+                              {selectedProjectTemplates.map((template) => (
+                                <option key={template.key} value={template.key}>
+                                  {template.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>Source</label>
+                            <input
+                              style={styles.input}
+                              value={utmFields.source}
+                              onChange={(e) => updateUtmField("source", e.target.value)}
+                              placeholder="mkg"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>Medium</label>
+                            <input
+                              style={styles.input}
+                              value={utmFields.medium}
+                              onChange={(e) => updateUtmField("medium", e.target.value)}
+                              placeholder="video"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>Campaign</label>
+                            <input
+                              style={styles.input}
+                              value={utmFields.campaign}
+                              onChange={(e) => updateUtmField("campaign", e.target.value)}
+                              placeholder="campaign-name"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>Term</label>
+                            <input
+                              style={styles.input}
+                              value={utmFields.term}
+                              onChange={(e) => updateUtmField("term", e.target.value)}
+                              placeholder="news"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>Content</label>
+                            <input
+                              style={styles.input}
+                              value={utmFields.content}
+                              onChange={(e) => updateUtmField("content", e.target.value)}
+                              placeholder="reels"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>Source Platform</label>
+                            <input
+                              style={styles.input}
+                              value={utmFields.sourcePlatform}
+                              onChange={(e) =>
+                                updateUtmField("sourcePlatform", e.target.value)
+                              }
+                              placeholder="fb"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>UTM Query Preview</label>
+                            <textarea
+                              rows={3}
+                              style={{ ...styles.textareaLarge, background: "#f3f6fb" }}
+                              value={utmTemplate}
+                              readOnly
+                              placeholder="UTM query will appear here"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={styles.label}>URL With UTM</label>
+                            <textarea
+                              rows={4}
+                              style={{ ...styles.textareaLarge, background: "#f3f6fb" }}
+                              value={longUrlWithUtm}
+                              readOnly
+                              placeholder="Paste the original URL above to preview the final tracking URL"
+                            />
+                          </div>
+                        </div>
                       </div>
 
                       <div>
@@ -1230,6 +1772,34 @@ const styles: Record<string, React.CSSProperties> = {
   formStack: {
     display: "grid",
     gap: 16,
+  },
+  utmBuilderCard: {
+    display: "grid",
+    gap: 16,
+    padding: 16,
+    borderRadius: 18,
+    border: "1px solid #d9e1ee",
+    background: "#fbfcfe",
+  },
+  utmBuilderHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  utmBuilderTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: "#10233f",
+  },
+  utmBuilderBadge: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#e8efff",
+    color: "#3b5ccc",
+    fontSize: 12,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
   },
   label: {
     display: "block",
