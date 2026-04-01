@@ -17,7 +17,11 @@ type CurrentUser = {
 type OkurlProjectOption = {
   id: number;
   name: string;
+  utmTemplate?: string;
 };
+
+const buildDefaultUtmTemplate = (projectName: string) =>
+  `?utm_source=${projectName}&utm_medium=social&utm_campaign={campaign_name}&utm_content={content_name}`;
 
 const demoUsers: Record<string, DemoUser> = {
   haiyennt: {
@@ -220,6 +224,7 @@ export default function Page() {
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [utmTemplate, setUtmTemplate] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -265,6 +270,14 @@ export default function Page() {
           .map((item: any) => ({
             id: Number(item?.id),
             name: String(item?.name || "").trim(),
+            utmTemplate: String(
+              item?.utm_template ||
+                item?.utmTemplate ||
+                item?.utm_template_url ||
+                item?.utmTemplateUrl ||
+                item?.utm_builder ||
+                ""
+            ).trim(),
           }))
           .filter((item) => item.id && item.name)
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -292,6 +305,18 @@ export default function Page() {
       setSelectedProjectId(String(matched.id));
     }
   }, [pageName, okurlProjects]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setUtmTemplate("");
+      return;
+    }
+
+    setUtmTemplate(
+      selectedProject.utmTemplate?.trim() ||
+        buildDefaultUtmTemplate(selectedProject.name)
+    );
+  }, [selectedProject]);
 
   const resetUploadForm = () => {
     setFiles([]);
@@ -347,6 +372,8 @@ export default function Page() {
     setTxtDescription("");
     setShortUrlError("");
     setShortUrlSuccess("");
+    setSelectedProjectId("");
+    setUtmTemplate("");
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -735,6 +762,7 @@ export default function Page() {
                     <div>
                       <label style={styles.label}>TXT Description</label>
                       <textarea
+                        rows={3}
                         style={styles.textareaLarge}
                         value={txtDescription}
                         onChange={(e) => setTxtDescription(e.target.value)}
@@ -846,6 +874,17 @@ export default function Page() {
                       </div>
 
                       <div>
+                        <label style={styles.label}>UTM Template</label>
+                        <textarea
+                          rows={3}
+                          style={styles.textareaLarge}
+                          value={utmTemplate}
+                          onChange={(e) => setUtmTemplate(e.target.value)}
+                          placeholder="Choose a project to load its UTM template"
+                        />
+                      </div>
+
+                      <div>
                         <label style={styles.label}>Custom slug (optional)</label>
                         <input
                           style={styles.input}
@@ -932,10 +971,6 @@ export default function Page() {
                     <div style={styles.summaryRow}>
                       <span>Project</span>
                       <strong>{selectedProject?.name || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>project_id</span>
-                      <strong>{selectedProject?.id ?? "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>Files</span>
@@ -1236,7 +1271,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   textareaLarge: {
     width: "100%",
-    minHeight: 220,
+    minHeight: 96,
     borderRadius: 14,
     border: "1px solid #d9e1ee",
     padding: "13px 14px",
