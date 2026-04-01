@@ -38,6 +38,7 @@ type OkurlProjectOption = {
 };
 
 const SHORT_LINK_DOMAIN = "gjw.us";
+const GJW_DOMAIN_ID = "2";
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -882,17 +883,7 @@ export default function Page() {
         body: JSON.stringify({
           url: urlForShortLink,
           project_id: Number(selectedProjectId),
-          domain: SHORT_LINK_DOMAIN,
-          domain_id: selectedProject?.domainId || undefined,
-          utm_tpl_id: selectedProject?.utmTemplateId || undefined,
-          utm_template_id: selectedProject?.utmTemplateId || undefined,
-          utm_template: utmTemplate || undefined,
-          utm_source: utmFields.source.trim() || undefined,
-          utm_medium: utmFields.medium.trim() || undefined,
-          utm_campaign: utmFields.campaign.trim() || undefined,
-          utm_term: utmFields.term.trim() || undefined,
-          utm_content: utmFields.content.trim() || undefined,
-          utm_source_platform: utmFields.sourcePlatform.trim() || undefined,
+          domain_id: GJW_DOMAIN_ID,
           slug: customSlug.trim() || undefined,
         }),
       });
@@ -980,6 +971,7 @@ export default function Page() {
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
       formData.append("okurl_domain", SHORT_LINK_DOMAIN);
+      formData.append("domain_id", GJW_DOMAIN_ID);
       formData.append("utm_template", utmTemplate);
       formData.append("utm_source", utmFields.source);
       formData.append("utm_medium", utmFields.medium);
@@ -1275,6 +1267,66 @@ export default function Page() {
                     ))}
                   </div>
                 </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 4</div>
+                      <div style={styles.panelTitle}>n8n Submission</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.panelDesc}>
+                    Review the current summary, then submit everything to n8n.
+                  </div>
+
+                  <div style={styles.summaryCard}>
+                    <div style={styles.actionTitle}>Current summary</div>
+                    <div style={styles.summaryRow}>
+                      <span>Page</span>
+                      <strong>{pageName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Folder</span>
+                      <strong>{folderName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Project</span>
+                      <strong>{selectedProject?.name || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Files</span>
+                      <strong>{files.length}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Total size</span>
+                      <strong>{totalSizeMb} MB</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Short URL</span>
+                      <strong style={styles.summaryBreak}>{shortUrl || "Not set"}</strong>
+                    </div>
+                  </div>
+
+                  <div style={styles.inlineActions}>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.primaryButton,
+                        width: "100%",
+                        opacity: submitting ? 0.7 : 1,
+                        cursor: submitting ? "not-allowed" : "pointer",
+                      }}
+                      onClick={submitToN8n}
+                      disabled={submitting}
+                    >
+                      {submitting ? "Submitting..." : "Submit to n8n"}
+                    </button>
+                  </div>
+
+                  {success ? <div style={styles.successBox}>{success}</div> : null}
+                  {error ? <div style={styles.errorBox}>{error}</div> : null}
+                </section>
               </div>
 
               <aside style={styles.actionColumn}>
@@ -1403,17 +1455,6 @@ export default function Page() {
                           </div>
 
                           <div>
-                            <label style={styles.label}>UTM Query Preview</label>
-                            <textarea
-                              rows={3}
-                              style={{ ...styles.textareaLarge, background: "#f3f6fb" }}
-                              value={utmTemplate}
-                              readOnly
-                              placeholder="UTM query will appear here"
-                            />
-                          </div>
-
-                          <div>
                             <label style={styles.label}>URL With UTM</label>
                             <textarea
                               rows={4}
@@ -1478,54 +1519,6 @@ export default function Page() {
                     {shortUrlError ? (
                       <div style={styles.errorBox}>{shortUrlError}</div>
                     ) : null}
-                  </section>
-
-                  <section style={styles.actionPanel}>
-                    <div style={styles.actionTitle}>n8n Submission</div>
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.primaryButton,
-                        width: "100%",
-                        opacity: submitting ? 0.7 : 1,
-                        cursor: submitting ? "not-allowed" : "pointer",
-                      }}
-                      onClick={submitToN8n}
-                      disabled={submitting}
-                    >
-                      {submitting ? "Submitting..." : "Submit to n8n"}
-                    </button>
-
-                    {success ? <div style={styles.successBox}>{success}</div> : null}
-                    {error ? <div style={styles.errorBox}>{error}</div> : null}
-                  </section>
-
-                  <section style={styles.actionPanel}>
-                    <div style={styles.actionTitle}>Current summary</div>
-                    <div style={styles.summaryRow}>
-                      <span>Page</span>
-                      <strong>{pageName || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Folder</span>
-                      <strong>{folderName || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Project</span>
-                      <strong>{selectedProject?.name || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Files</span>
-                      <strong>{files.length}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Total size</span>
-                      <strong>{totalSizeMb} MB</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Short URL</span>
-                      <strong style={styles.summaryBreak}>{shortUrl || "Not set"}</strong>
-                    </div>
                   </section>
 
                   <section style={styles.actionPanel}>
@@ -1728,6 +1721,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 20,
     padding: 20,
     boxShadow: "0 8px 28px rgba(24, 39, 75, 0.05)",
+  },
+  summaryCard: {
+    background: "#fbfcfe",
+    border: "1px solid #e6ebf3",
+    borderRadius: 20,
+    padding: 20,
   },
   sectionHeader: {
     display: "flex",
