@@ -1146,12 +1146,11 @@ export default function Page() {
           <div style={styles.navCard}>
             <div style={styles.navSectionTitle}>Current flow</div>
             <ul style={styles.miniList}>
-              <li>Enter original URL first</li>
-              <li>Choose page destination</li>
-              <li>Choose OKURL project manually</li>
-              <li>Generate short URL and copy it</li>
-              <li>Paste short URL into TXT manually</li>
-              <li>Download TXT and upload mp4 + txt together</li>
+              <li>Choose page and folder destination</li>
+              <li>Generate the OKURL short link</li>
+              <li>Write and download the TXT file</li>
+              <li>Upload the mp4 and matching txt</li>
+              <li>Review the summary and submit to n8n</li>
             </ul>
           </div>
         </aside>
@@ -1258,160 +1257,16 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 2</div>
-                      <div style={styles.panelTitle}>TXT generator</div>
+                      <div style={styles.panelTitle}>OKURL</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Write the TXT content, then download it before uploading.
+                    Enter the original URL, choose the OKURL project, review the UTM values,
+                    then generate the short link.
                   </div>
 
-                  <div style={styles.formStack}>
-                    <div>
-                      <label style={styles.label}>TXT Description</label>
-                      <textarea
-                        rows={3}
-                        style={styles.textareaLarge}
-                        value={txtDescription}
-                        onChange={(e) => setTxtDescription(e.target.value)}
-                        placeholder="Write the TXT content here"
-                      />
-                    </div>
-                  </div>
-
-                  <div style={styles.inlineActions}>
-                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
-                      Download UTF-8 TXT
-                    </button>
-                  </div>
-                </section>
-
-                <section style={styles.panel}>
-                  <div style={styles.sectionHeader}>
-                    <div>
-                      <div style={styles.kicker}>Step 3</div>
-                      <div style={styles.panelTitle}>Upload files</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.panelDesc}>
-                    After downloading the TXT file, upload the video and the matching TXT file together.
-                  </div>
-
-                  <div
-                    style={styles.dropzone}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={onDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <div style={styles.dropzoneTitle}>Drop files here or click to browse</div>
-                    <div style={styles.dropzoneSub}>
-                      Recommended: one .mp4 and one matching .txt
-                    </div>
-                  </div>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    style={{ display: "none" }}
-                    onChange={onFileChange}
-                  />
-
-                  <div style={styles.fileSummary}>
-                    {files.length} file(s) selected · {totalSizeMb} MB
-                  </div>
-
-                  <div style={styles.fileList}>
-                    {files.map((file, idx) => (
-                      <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
-                        <div>
-                          <div style={styles.fileName}>{file.name}</div>
-                          <div style={styles.fileMeta}>
-                            {(file.size / 1024 / 1024).toFixed(2)} MB
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          style={styles.secondaryButton}
-                          onClick={() => removeFile(idx)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section style={styles.panel}>
-                  <div style={styles.sectionHeader}>
-                    <div>
-                      <div style={styles.kicker}>Step 4</div>
-                      <div style={styles.panelTitle}>n8n Submission</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.panelDesc}>
-                    Review the current summary, then submit everything to n8n.
-                  </div>
-
-                  <div style={styles.summaryCard}>
-                    <div style={styles.actionTitle}>Current summary</div>
-                    <div style={styles.summaryRow}>
-                      <span>Page</span>
-                      <strong>{pageName || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Folder</span>
-                      <strong>{folderName || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Project</span>
-                      <strong>{selectedProject?.name || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Files</span>
-                      <strong>{files.length}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Total size</span>
-                      <strong>{totalSizeMb} MB</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Short URL</span>
-                      <strong style={styles.summaryBreak}>{shortUrl || "Not set"}</strong>
-                    </div>
-                  </div>
-
-                  <div style={styles.inlineActions}>
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.primaryButton,
-                        width: "100%",
-                        opacity: submitting ? 0.7 : 1,
-                        cursor: submitting ? "not-allowed" : "pointer",
-                      }}
-                      onClick={submitToN8n}
-                      disabled={submitting}
-                    >
-                      {submitting ? "Submitting..." : "Submit to n8n"}
-                    </button>
-                  </div>
-
-                  {success ? <div style={styles.successBox}>{success}</div> : null}
-                  {error ? <div style={styles.errorBox}>{error}</div> : null}
-                </section>
-              </div>
-
-              <aside style={styles.actionColumn}>
-                <div style={styles.actionStack}>
-                  <section style={styles.actionPanel}>
-                    <div style={styles.actionTitle}>OKURL</div>
-
+                  <div style={styles.okurlStepGrid}>
                     <div style={styles.formStack}>
                       <div>
                         <label style={styles.label}>Original URL</label>
@@ -1444,35 +1299,89 @@ export default function Page() {
                         </div>
                       </div>
 
-                      <div style={styles.utmBuilderCard}>
-                        <div style={styles.utmBuilderHeader}>
-                          <div style={styles.utmBuilderTitle}>UTM Builder</div>
-                          <div style={styles.utmBuilderBadge}>
-                            {selectedUtmTemplate?.label || "Auto"}
-                          </div>
+                      <div>
+                        <label style={styles.label}>Custom slug (optional)</label>
+                        <input
+                          style={styles.input}
+                          value={customSlug}
+                          onChange={(e) => setCustomSlug(e.target.value)}
+                          placeholder="custom-slug"
+                        />
+                      </div>
+
+                      <div style={styles.inlineActions}>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.primaryButton,
+                            opacity: creatingShortUrl ? 0.7 : 1,
+                            cursor: creatingShortUrl ? "not-allowed" : "pointer",
+                          }}
+                          onClick={generateShortUrl}
+                          disabled={creatingShortUrl}
+                        >
+                          {creatingShortUrl ? "Generating..." : "Generate Short URL"}
+                        </button>
+                      </div>
+
+                      <div>
+                        <label style={styles.label}>Short URL</label>
+                        <div style={styles.shortUrlRow}>
+                          <input
+                            style={{ ...styles.inputReadonly, flex: 1 }}
+                            value={shortUrl}
+                            readOnly
+                            placeholder="Generated short link"
+                          />
+                          <button
+                            type="button"
+                            style={styles.secondaryButton}
+                            onClick={copyShortUrl}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+
+                      {shortUrlSuccess ? (
+                        <div style={styles.successBox}>{shortUrlSuccess}</div>
+                      ) : null}
+
+                      {shortUrlError ? (
+                        <div style={styles.errorBox}>{shortUrlError}</div>
+                      ) : null}
+                    </div>
+
+                    <div style={styles.utmBuilderCard}>
+                      <div style={styles.utmBuilderHeader}>
+                        <div style={styles.utmBuilderTitle}>UTM Builder</div>
+                        <div style={styles.utmBuilderBadge}>
+                          {selectedUtmTemplate?.label || "Auto"}
+                        </div>
+                      </div>
+
+                      <div style={styles.formStack}>
+                        <div>
+                          <label style={styles.label}>UTM Template</label>
+                          <select
+                            style={styles.select}
+                            value={selectedUtmTemplateKey}
+                            onChange={(e) => handleUtmTemplateChange(e.target.value)}
+                          >
+                            <option value="">
+                              {selectedProject
+                                ? "Select UTM template"
+                                : "Choose project first"}
+                            </option>
+                            {selectedProjectTemplates.map((template) => (
+                              <option key={template.key} value={template.key}>
+                                {template.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
-                        <div style={styles.formStack}>
-                          <div>
-                            <label style={styles.label}>UTM Template</label>
-                            <select
-                              style={styles.select}
-                              value={selectedUtmTemplateKey}
-                              onChange={(e) => handleUtmTemplateChange(e.target.value)}
-                            >
-                              <option value="">
-                                {selectedProject
-                                  ? "Select UTM template"
-                                  : "Choose project first"}
-                              </option>
-                              {selectedProjectTemplates.map((template) => (
-                                <option key={template.key} value={template.key}>
-                                  {template.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
+                        <div style={styles.formGridTwo}>
                           <div>
                             <label style={styles.label}>Source</label>
                             <input
@@ -1534,83 +1443,186 @@ export default function Page() {
                               placeholder="fb"
                             />
                           </div>
+                        </div>
 
-                          <div>
-                            <label style={styles.label}>URL With UTM</label>
-                            <textarea
-                              rows={4}
-                              style={{ ...styles.textareaLarge, background: "#f3f6fb" }}
-                              value={longUrlWithUtm}
-                              readOnly
-                              placeholder="Paste the original URL above to preview the final tracking URL"
-                            />
-                          </div>
+                        <div>
+                          <label style={styles.label}>URL With UTM</label>
+                          <textarea
+                            rows={4}
+                            style={{ ...styles.textareaLarge, background: "#f3f6fb" }}
+                            value={longUrlWithUtm}
+                            readOnly
+                            placeholder="Paste the original URL above to preview the final tracking URL"
+                          />
                         </div>
                       </div>
-
-                      <div>
-                        <label style={styles.label}>Custom slug (optional)</label>
-                        <input
-                          style={styles.input}
-                          value={customSlug}
-                          onChange={(e) => setCustomSlug(e.target.value)}
-                          placeholder="custom-slug"
-                        />
-                      </div>
                     </div>
+                  </div>
+                </section>
 
-                    <div style={styles.inlineActions}>
-                      <button
-                        type="button"
-                        style={{
-                          ...styles.primaryButton,
-                          opacity: creatingShortUrl ? 0.7 : 1,
-                          cursor: creatingShortUrl ? "not-allowed" : "pointer",
-                        }}
-                        onClick={generateShortUrl}
-                        disabled={creatingShortUrl}
-                      >
-                        {creatingShortUrl ? "Generating..." : "Generate Short URL"}
-                      </button>
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 3</div>
+                      <div style={styles.panelTitle}>TXT generator</div>
                     </div>
+                  </div>
 
-                    <div style={{ marginTop: 16 }}>
-                      <label style={styles.label}>Short URL</label>
-                      <div style={styles.shortUrlRow}>
-                        <input
-                          style={{ ...styles.inputReadonly, flex: 1 }}
-                          value={shortUrl}
-                          readOnly
-                          placeholder="Generated short link"
-                        />
+                  <div style={styles.panelDesc}>
+                    Write the TXT content, then download it before uploading.
+                  </div>
+
+                  <div style={styles.formStack}>
+                    <div>
+                      <label style={styles.label}>TXT Description</label>
+                      <textarea
+                        rows={3}
+                        style={styles.textareaLarge}
+                        value={txtDescription}
+                        onChange={(e) => setTxtDescription(e.target.value)}
+                        placeholder="Write the TXT content here"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.inlineActions}>
+                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
+                      Download UTF-8 TXT
+                    </button>
+                  </div>
+                </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 4</div>
+                      <div style={styles.panelTitle}>Upload files</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.panelDesc}>
+                    After downloading the TXT file, upload the video and the matching TXT file together.
+                  </div>
+
+                  <div
+                    style={styles.dropzone}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={onDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <div style={styles.dropzoneTitle}>Drop files here or click to browse</div>
+                    <div style={styles.dropzoneSub}>
+                      Recommended: one .mp4 and one matching .txt
+                    </div>
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={onFileChange}
+                  />
+
+                  <div style={styles.fileSummary}>
+                    {files.length} file(s) selected · {totalSizeMb} MB
+                  </div>
+
+                  <div style={styles.fileList}>
+                    {files.map((file, idx) => (
+                      <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
+                        <div>
+                          <div style={styles.fileName}>{file.name}</div>
+                          <div style={styles.fileMeta}>
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                          </div>
+                        </div>
                         <button
                           type="button"
                           style={styles.secondaryButton}
-                          onClick={copyShortUrl}
+                          onClick={() => removeFile(idx)}
                         >
-                          Copy
+                          Remove
                         </button>
                       </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 5</div>
+                      <div style={styles.panelTitle}>n8n Submission</div>
                     </div>
+                  </div>
 
-                    {shortUrlSuccess ? (
-                      <div style={styles.successBox}>{shortUrlSuccess}</div>
-                    ) : null}
+                  <div style={styles.panelDesc}>
+                    Review the current summary, then submit everything to n8n.
+                  </div>
 
-                    {shortUrlError ? (
-                      <div style={styles.errorBox}>{shortUrlError}</div>
-                    ) : null}
-                  </section>
+                  <div style={styles.summaryCard}>
+                    <div style={styles.actionTitle}>Current summary</div>
+                    <div style={styles.summaryRow}>
+                      <span>Page</span>
+                      <strong>{pageName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Folder</span>
+                      <strong>{folderName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Project</span>
+                      <strong>{selectedProject?.name || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Files</span>
+                      <strong>{files.length}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Total size</span>
+                      <strong>{totalSizeMb} MB</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>Short URL</span>
+                      <strong style={styles.summaryBreak}>{shortUrl || "Not set"}</strong>
+                    </div>
+                  </div>
 
+                  <div style={styles.inlineActions}>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.primaryButton,
+                        width: "100%",
+                        opacity: submitting ? 0.7 : 1,
+                        cursor: submitting ? "not-allowed" : "pointer",
+                      }}
+                      onClick={submitToN8n}
+                      disabled={submitting}
+                    >
+                      {submitting ? "Submitting..." : "Submit to n8n"}
+                    </button>
+                  </div>
+
+                  {success ? <div style={styles.successBox}>{success}</div> : null}
+                  {error ? <div style={styles.errorBox}>{error}</div> : null}
+                </section>
+              </div>
+
+              <aside style={styles.actionColumn}>
+                <div style={styles.actionStack}>
                   <section style={styles.actionPanel}>
                     <div style={styles.actionTitle}>Notes</div>
                     <ul style={styles.miniList}>
-                      <li>Enter original URL first</li>
-                      <li>Choose page destination</li>
-                      <li>Choose OKURL project manually</li>
-                      <li>Generate short URL and copy it</li>
-                      <li>Paste short URL into TXT manually</li>
-                      <li>Download TXT and upload mp4 + txt together</li>
+                      <li>Step 1: Choose page and folder destination</li>
+                      <li>Step 2: Generate the OKURL short link</li>
+                      <li>Step 3: Write and download the TXT file</li>
+                      <li>Step 4: Upload the mp4 and matching txt</li>
+                      <li>Step 5: Review the summary and submit to n8n</li>
                     </ul>
                   </section>
                 </div>
@@ -1852,6 +1864,12 @@ const styles: Record<string, React.CSSProperties> = {
   formStack: {
     display: "grid",
     gap: 16,
+  },
+  okurlStepGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 20,
+    alignItems: "start",
   },
   utmBuilderCard: {
     display: "grid",
