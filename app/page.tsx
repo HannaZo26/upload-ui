@@ -4,14 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type DemoUser = {
   password: string;
-  displayName: string;
   folders: string[];
   pages: string[];
 };
 
 type CurrentUser = {
   username: string;
-  displayName: string;
 };
 
 type UtmBuilderFields = {
@@ -52,6 +50,14 @@ type ShortsClipOption = {
 
 const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 4;
+const WORKFLOW_STEPS = [
+  "Choose page and folder destination",
+  "Generate the OKURL short link",
+  "Write and download the TXT files",
+  "Generate and review shorts",
+  "Upload the mp4 and matching txt",
+  "Review the summary and start automation",
+];
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -386,7 +392,6 @@ const normalizeShortUrlToDomain = (value: string, domain: string) => {
 const demoUsers: Record<string, DemoUser> = {
   haiyennt: {
     password: "Hge&geTEg@ge123",
-    displayName: "Haiyen",
     folders: [
       "tastefulworldzh",
       "feelgoodbeautyzh",
@@ -421,7 +426,6 @@ const demoUsers: Record<string, DemoUser> = {
 
   hannah: {
     password: "UhgTRg@kg$253",
-    displayName: "Hannah",
     folders: [
       "tastefulworldzh",
       "feelgoodbeautyzh",
@@ -478,7 +482,6 @@ const demoUsers: Record<string, DemoUser> = {
 
   gmarketing: {
     password: "jgGTR#kg$93",
-    displayName: "GMarketing",
     folders: [
       "tastefulworldzh",
       "feelgoodbeautyzh",
@@ -535,23 +538,36 @@ const demoUsers: Record<string, DemoUser> = {
 
   ying: {
     password: "HGtYEG$eff@323",
-    displayName: "Ying",
     folders: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
     pages: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
   },
 
   ivyzhang: {
     password: "ygeTTge$eff@#24",
-    displayName: "Ivy Zhang",
     folders: ["everydayvitalityzh", "healthyrhythmdaily"],
     pages: ["everydayvitalityzh", "healthyrhythmdaily"],
   },
 
   lucywang: {
     password: "GhyTge#rge@87",
-    displayName: "Lucy Wang",
     folders: ["horizonupdatesshow", "flashbrieftoday"],
     pages: ["horizonupdatesshow", "flashbrieftoday"],
+  },
+
+  demo: {
+    password: "123",
+    folders: [
+      "clearviewdaily",
+      "viewscopedaily",
+      "dailytrendpulse",
+      "flashbrieftoday",
+    ],
+    pages: [
+      "clearviewdaily",
+      "viewscopedaily",
+      "dailytrendpulse",
+      "flashbrieftoday",
+    ],
   },
 };
 
@@ -864,13 +880,15 @@ export default function Page() {
       return;
     }
 
-    const firstFolder = user.folders[0] ?? "";
     const firstPage = user.pages[0] ?? "";
+    const firstFolder =
+      user.folders.find(
+        (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
+      ) ??
+      user.folders[0] ??
+      firstPage;
 
-    setCurrentUser({
-      username,
-      displayName: user.displayName,
-    });
+    setCurrentUser({ username });
     setFolderName(firstFolder);
     setPageName(firstPage);
     setLoginPassword("");
@@ -933,6 +951,11 @@ export default function Page() {
 
   const handlePageChange = (value: string) => {
     setPageName(value);
+    const linkedFolder =
+      availableFolders.find(
+        (folder) => folder.trim().toLowerCase() === value.trim().toLowerCase()
+      ) ?? value;
+    setFolderName(linkedFolder);
   };
 
   const handleUtmTemplateChange = (templateKey: string) => {
@@ -1226,18 +1249,18 @@ export default function Page() {
         <aside style={styles.sidebar}>
           <div>
             <div style={styles.logoBox}>
-              <div style={styles.logoDot} />
+              <div style={styles.logoMark}>
+                <img src="/icon.svg" alt="Ucreator Console" style={styles.logoIcon} />
+              </div>
               <div>
-                <div style={styles.logoTitle}>Upload Console</div>
-                <div style={styles.logoSub}>Drive + OKURL + n8n</div>
+                <div style={styles.logoTitle}>Ucreator Console</div>
               </div>
             </div>
 
             {currentUser ? (
               <div style={styles.sidebarInfoCard}>
-                <div style={styles.sidebarInfoTitle}>Operator</div>
-                <div style={styles.sidebarInfoName}>{currentUser.displayName}</div>
-                <div style={styles.sidebarInfoSub}>Username: {currentUser.username}</div>
+                <div style={styles.sidebarInfoTitle}>Account</div>
+                <div style={styles.sidebarInfoName}>{currentUser.username}</div>
                 <div style={styles.sidebarInfoMeta}>Signed in and ready to upload</div>
                 <button
                   style={{ ...styles.secondaryButton, width: "100%", marginTop: 12 }}
@@ -1251,14 +1274,14 @@ export default function Page() {
 
           <div style={styles.navCard}>
             <div style={styles.navSectionTitle}>Steps</div>
-            <ul style={styles.miniList}>
-              <li>Step 1: Choose page and folder destination</li>
-              <li>Step 2: Generate the OKURL short link</li>
-              <li>Step 3: Write and download the TXT file</li>
-              <li>Step 4: Generate and review shorts</li>
-              <li>Step 5: Upload the mp4 and matching txt</li>
-              <li>Step 6: Review the summary and start automation</li>
-            </ul>
+            <div style={styles.stepsStack}>
+              {WORKFLOW_STEPS.map((step, index) => (
+                <div key={step} style={styles.stepCard}>
+                  <div style={styles.stepBadge}>{index + 1}</div>
+                  <div style={styles.stepText}>{step}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </aside>
 
@@ -1306,6 +1329,18 @@ export default function Page() {
                 </form>
 
                 {authError ? <div style={styles.errorBox}>{authError}</div> : null}
+
+                <div style={styles.demoCard}>
+                  <div style={styles.demoTitle}>Demo account</div>
+                  <div style={styles.demoRow}>
+                    <span style={styles.demoKey}>Username</span>
+                    <span style={styles.demoValue}>demo</span>
+                  </div>
+                  <div style={styles.demoRow}>
+                    <span style={styles.demoKey}>Password</span>
+                    <span style={styles.demoValue}>123</span>
+                  </div>
+                </div>
               </div>
             </section>
           ) : (
@@ -1341,17 +1376,12 @@ export default function Page() {
 
                     <div>
                       <label style={styles.label}>Folder Name</label>
-                      <select
-                        style={styles.select}
+                      <input
+                        style={styles.inputReadonly}
                         value={folderName}
-                        onChange={(e) => setFolderName(e.target.value)}
-                      >
-                        {availableFolders.map((folder) => (
-                          <option key={folder} value={folder}>
-                            {folder}
-                          </option>
-                        ))}
-                      </select>
+                        readOnly
+                        placeholder="Folder will match the selected page name"
+                      />
                     </div>
                   </div>
                 </section>
@@ -1871,21 +1901,23 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     marginBottom: 18,
   },
-  logoDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 999,
-    background: "#f28c28",
-    boxShadow: "0 0 0 6px rgba(242,140,40,0.18)",
+  logoMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    overflow: "hidden",
+    boxShadow: "0 10px 20px rgba(242, 140, 40, 0.24)",
+    flexShrink: 0,
+  },
+  logoIcon: {
+    width: "100%",
+    height: "100%",
+    display: "block",
   },
   logoTitle: {
     fontWeight: 800,
-    fontSize: 18,
-  },
-  logoSub: {
-    fontSize: 12,
-    color: "#94a7c6",
-    marginTop: 2,
+    fontSize: 20,
+    letterSpacing: -0.3,
   },
   sidebarInfoCard: {
     background: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)",
@@ -1934,26 +1966,36 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 10,
     fontWeight: 700,
   },
-  navItem: {
-    padding: "10px 12px",
-    borderRadius: 12,
-    color: "#dbe6fb",
-    fontSize: 14,
+  stepsStack: {
+    display: "grid",
+    gap: 10,
   },
-  navItemActive: {
+  stepCard: {
+    display: "grid",
+    gridTemplateColumns: "34px minmax(0, 1fr)",
+    gap: 12,
+    alignItems: "center",
     padding: "10px 12px",
-    borderRadius: 12,
-    background: "#1d3358",
-    color: "#ffffff",
-    fontWeight: 700,
-    fontSize: 14,
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
   },
-  miniList: {
-    margin: 0,
-    paddingLeft: 18,
-    color: "inherit",
-    lineHeight: 1.7,
+  stepBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "#fff1df",
+    color: "#ba680f",
+    fontWeight: 800,
     fontSize: 13,
+  },
+  stepText: {
+    color: "#edf4ff",
+    fontSize: 13,
+    lineHeight: 1.5,
+    fontWeight: 600,
   },
   mainArea: {
     padding: 28,
@@ -2045,12 +2087,19 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 8,
   },
   kicker: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 64,
+    padding: "6px 12px",
+    borderRadius: 999,
+    background: "#fff2e4",
+    border: "1px solid #ffd4ac",
     color: "#c86d12",
-    fontWeight: 700,
-    marginBottom: 6,
+    fontSize: 12,
+    letterSpacing: 0.4,
+    fontWeight: 800,
+    marginBottom: 8,
   },
   panelTitle: {
     fontSize: 28,
@@ -2138,6 +2187,35 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#d97706",
     textDecoration: "none",
     fontWeight: 700,
+  },
+  demoCard: {
+    marginTop: 18,
+    borderRadius: 18,
+    border: "1px solid #dce7f7",
+    background: "linear-gradient(180deg, #f9fbff 0%, #fffaf3 100%)",
+    padding: 16,
+  },
+  demoTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#0d2242",
+    marginBottom: 12,
+  },
+  demoRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "8px 0",
+    borderTop: "1px solid #e8eef8",
+    fontSize: 14,
+  },
+  demoKey: {
+    color: "#627590",
+    fontWeight: 600,
+  },
+  demoValue: {
+    color: "#0d2242",
+    fontWeight: 800,
   },
   input: {
     width: "100%",
