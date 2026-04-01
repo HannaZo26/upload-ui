@@ -51,6 +51,7 @@ type ShortsClipOption = {
 };
 
 const SHORT_LINK_DOMAIN = "gjw.us";
+const TXT_BOX_COUNT = 4;
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -475,9 +476,9 @@ const demoUsers: Record<string, DemoUser> = {
     ],
   },
 
-  gjwmarketing: {
+  gmarketing: {
     password: "jgGTR#kg$93",
-    displayName: "GJW Marketing",
+    displayName: "GMarketing",
     folders: [
       "tastefulworldzh",
       "feelgoodbeautyzh",
@@ -566,7 +567,9 @@ export default function Page() {
   const [folderName, setFolderName] = useState("clearviewdaily");
   const [pageName, setPageName] = useState("clearviewdaily");
 
-  const [txtDescription, setTxtDescription] = useState("");
+  const [txtDescriptions, setTxtDescriptions] = useState<string[]>(
+    Array.from({ length: TXT_BOX_COUNT }, () => "")
+  );
 
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -643,6 +646,17 @@ export default function Page() {
   const longUrlWithUtm = useMemo(() => {
     return buildUrlWithUtm(longUrl, utmFields);
   }, [longUrl, utmFields]);
+
+  const combinedTxtNotes = useMemo(() => {
+    return txtDescriptions
+      .map((value, index) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "";
+        return `video${index + 1}\n${trimmed}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }, [txtDescriptions]);
 
   useEffect(() => {
     const loadDomains = async () => {
@@ -819,7 +833,7 @@ export default function Page() {
 
   const resetUploadForm = () => {
     setFiles([]);
-    setTxtDescription("");
+    setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
     setLongUrl("");
     setShortUrl("");
     setCustomSlug("");
@@ -873,7 +887,7 @@ export default function Page() {
     setLongUrl("");
     setShortUrl("");
     setCustomSlug("");
-    setTxtDescription("");
+    setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
     setShortUrlError("");
     setShortUrlSuccess("");
     setSelectedProjectId("");
@@ -988,38 +1002,44 @@ export default function Page() {
     );
   };
 
+  const updateTxtDescription = (index: number, value: string) => {
+    setTxtDescriptions((prev) =>
+      prev.map((item, itemIndex) => (itemIndex === index ? value : item))
+    );
+  };
+
   const downloadTxt = () => {
-    if (!txtDescription.trim()) {
+    const populatedEntries = txtDescriptions
+      .map((value, index) => ({
+        fileName: `video${index + 1}.txt`,
+        content: value.trim(),
+      }))
+      .filter((item) => item.content);
+
+    if (!populatedEntries.length) {
       setError("Please enter TXT content before downloading.");
       setSuccess("");
       return;
     }
 
-    const blob = new Blob(["\uFEFF" + txtDescription.trim()], {
-      type: "text/plain;charset=utf-8",
+    populatedEntries.forEach((entry) => {
+      const blob = new Blob(["\uFEFF" + entry.content], {
+        type: "text/plain;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      a.href = url;
+      a.download = entry.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
 
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mi = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
-
-    const fileName =
-      pageName + "_" + yyyy + mm + dd + "_" + hh + mi + ss + ".txt";
-
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-
-    setSuccess("UTF-8 TXT downloaded successfully.");
+    setSuccess(
+      `${populatedEntries.length} UTF-8 TXT file(s) downloaded successfully.`
+    );
     setError("");
   };
 
@@ -1148,7 +1168,7 @@ export default function Page() {
       formData.append("folder_name", folderName);
       formData.append("title", "");
       formData.append("target_url", longUrlWithUtm || longUrl);
-      formData.append("notes", txtDescription);
+      formData.append("notes", combinedTxtNotes);
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
       formData.append("okurl_domain", SHORT_LINK_DOMAIN);
@@ -1555,22 +1575,24 @@ export default function Page() {
                     Write the TXT content, then download it before uploading.
                   </div>
 
-                  <div style={styles.formStack}>
-                    <div>
-                      <label style={styles.label}>TXT Description</label>
-                      <textarea
-                        rows={3}
-                        style={styles.textareaLarge}
-                        value={txtDescription}
-                        onChange={(e) => setTxtDescription(e.target.value)}
-                        placeholder="Write the TXT content here"
-                      />
-                    </div>
+                  <div style={styles.txtGrid}>
+                    {txtDescriptions.map((value, index) => (
+                      <div key={`txt-${index}`}>
+                        <label style={styles.label}>{`TXT Description ${index + 1}`}</label>
+                        <textarea
+                          rows={2}
+                          style={styles.textareaCompact}
+                          value={value}
+                          onChange={(e) => updateTxtDescription(index, e.target.value)}
+                          placeholder={`Write TXT content for video${index + 1}`}
+                        />
+                      </div>
+                    ))}
                   </div>
 
                   <div style={styles.inlineActions}>
                     <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
-                      Download UTF-8 TXT
+                      Download All TXT
                     </button>
                   </div>
                 </section>
@@ -2061,6 +2083,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gap: 16,
   },
+  txtGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 16,
+  },
   okurlStepGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
@@ -2146,6 +2173,18 @@ const styles: Record<string, React.CSSProperties> = {
   textareaLarge: {
     width: "100%",
     minHeight: 96,
+    borderRadius: 14,
+    border: "1px solid #cfdef2",
+    padding: "13px 14px",
+    fontSize: 15,
+    outline: "none",
+    background: "#fbfdff",
+    resize: "vertical",
+    boxSizing: "border-box",
+  },
+  textareaCompact: {
+    width: "100%",
+    minHeight: 72,
     borderRadius: 14,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
