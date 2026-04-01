@@ -2,8 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Upload Portal",
-  description: "Upload to Google Drive + OKURL + n8n",
+  title: "Ucreator Console",
+  description: "Social publishing console for shorts, uploads, and automation.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
