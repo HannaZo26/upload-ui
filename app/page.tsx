@@ -181,6 +181,40 @@ const demoUsers: Record<string, DemoUser> = {
   },
 };
 
+const OKURL_PROJECT_MAP: Record<string, number> = {
+  clearviewdaily: 33,
+  dailytrendpulse: 36,
+  flashbrieftoday: 37,
+  horizonupdatesshow: 34,
+  viewscopedaily: 35,
+
+  tastefulworld: 12,
+  feelgoodbeauty: 7,
+  worldtravelers: 8,
+
+  tastefulworldzh: 2,
+  feelgoodbeautyzh: 3,
+  worldtravelerszh: 4,
+
+  healthyliving: 6,
+  healthylivingzh: 1,
+
+  culturalwander: 5,
+  gjwmysteries: 24,
+
+  exclusivevisiondaily: 20,
+  freshpickstoday: 21,
+  dailytalktime: 22,
+  beyondheadlinesdaily: 19,
+
+  everydayvitalityzh: 42,
+  healthyrhythmdaily: 41,
+  renaradar: 38,
+  renaradarzh: 40,
+  lukeinsights: 39,
+  heresthequestion: 43,
+};
+
 type CurrentUser = {
   username: string;
   displayName: string;
@@ -195,12 +229,6 @@ export default function Page() {
   const n8nWebhookUrl =
     "https://n8n.influencerconnectagency.biz/webhook/upload-entry";
 
-  const [apiKey, setApiKey] = useState("");
-  const [domainId, setDomainId] = useState("1");
-  const [projectId, setProjectId] = useState("");
-  const [customSlug, setCustomSlug] = useState("");
-  const [shortUrl, setShortUrl] = useState("");
-
   const [folderName, setFolderName] = useState("clearviewdaily");
   const [pageName, setPageName] = useState("clearviewdaily");
 
@@ -208,9 +236,15 @@ export default function Page() {
 
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [creatingShortUrl, setCreatingShortUrl] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+
+  const [longUrl, setLongUrl] = useState("");
+  const [shortUrl, setShortUrl] = useState("");
+  const [customSlug, setCustomSlug] = useState("");
+  const [creatingShortUrl, setCreatingShortUrl] = useState(false);
+  const [shortUrlError, setShortUrlError] = useState("");
+  const [shortUrlSuccess, setShortUrlSuccess] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -229,11 +263,18 @@ export default function Page() {
     return (total / 1024 / 1024).toFixed(2);
   }, [files]);
 
+  const currentProjectId = useMemo(() => {
+    return OKURL_PROJECT_MAP[pageName] ?? null;
+  }, [pageName]);
+
   const resetUploadForm = () => {
     setFiles([]);
-    setCustomSlug("");
-    setShortUrl("");
     setTxtDescription("");
+    setLongUrl("");
+    setShortUrl("");
+    setCustomSlug("");
+    setShortUrlError("");
+    setShortUrlSuccess("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -274,6 +315,12 @@ export default function Page() {
     setSuccess("");
     setError("");
     setAuthError("");
+    setLongUrl("");
+    setShortUrl("");
+    setCustomSlug("");
+    setTxtDescription("");
+    setShortUrlError("");
+    setShortUrlSuccess("");
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -329,16 +376,7 @@ export default function Page() {
     const ss = String(now.getSeconds()).padStart(2, "0");
 
     const fileName =
-      pageName +
-      "_" +
-      yyyy +
-      mm +
-      dd +
-      "_" +
-      hh +
-      mi +
-      ss +
-      ".txt";
+      pageName + "_" + yyyy + mm + dd + "_" + hh + mi + ss + ".txt";
 
     a.href = url;
     a.download = fileName;
@@ -352,69 +390,73 @@ export default function Page() {
   };
 
   const generateShortUrl = async () => {
-    setSuccess("");
-    setError("");
+    setShortUrlError("");
+    setShortUrlSuccess("");
 
-    if (!apiKey.trim()) {
-      setError("Please enter the OKURL API key.");
+    if (!longUrl.trim()) {
+      setShortUrlError("Please enter the original URL first.");
       return;
     }
 
-    if (!domainId.trim()) {
-      setError("Please enter the OKURL domain_id.");
-      return;
-    }
-
-    if (!txtDescription.trim()) {
-      setError("Please paste the URL you want to shorten into the TXT generator box first.");
+    if (!currentProjectId) {
+      setShortUrlError("No OKURL project is mapped for this page.");
       return;
     }
 
     try {
       setCreatingShortUrl(true);
 
-      const payload: Record<string, string> = {
-        url: txtDescription.trim(),
-        domain_id: domainId.trim(),
-      };
-
-      if (projectId.trim()) payload.project_id = projectId.trim();
-      if (customSlug.trim()) payload.slug = customSlug.trim();
-
-      const res = await fetch("https://okurl.io/api/v1/urls/add", {
+      const res = await fetch("/api/okurl-create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + apiKey.trim(),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          url: longUrl.trim(),
+          project_id: currentProjectId,
+          slug: customSlug.trim() || undefined,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data?.message || "Failed to generate short URL.");
+        throw new Error(data?.error || data?.message || "Failed to generate short URL.");
       }
 
-      const value =
+      const generatedShortUrl =
         data?.short_url ||
         data?.shortUrl ||
         data?.data?.short_url ||
         data?.data?.shortUrl ||
+        data?.url ||
         "";
 
-      if (!value) {
-        throw new Error("Short URL was not returned by OKURL.");
+      if (!generatedShortUrl) {
+        throw new Error("Short URL was not returned.");
       }
 
-      setShortUrl(value);
-      setSuccess("Short URL generated successfully.");
-      setError("");
+      setShortUrl(generatedShortUrl);
+      setShortUrlSuccess("Short URL generated successfully.");
     } catch (err: any) {
-      setError(err?.message || "Failed to generate short URL.");
-      setSuccess("");
+      setShortUrlError(err?.message || "Failed to generate short URL.");
     } finally {
       setCreatingShortUrl(false);
+    }
+  };
+
+  const copyShortUrl = async () => {
+    if (!shortUrl.trim()) {
+      setShortUrlError("No short URL to copy.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(shortUrl);
+      setShortUrlSuccess("Short URL copied.");
+      setShortUrlError("");
+    } catch {
+      setShortUrlError("Copy failed.");
     }
   };
 
@@ -449,8 +491,6 @@ export default function Page() {
       formData.append("notes", "");
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
-      formData.append("project_id", projectId);
-      formData.append("domain_id", domainId);
 
       files.forEach((file, idx) => {
         formData.append("file_" + String(idx + 1), file, file.name);
@@ -540,10 +580,11 @@ export default function Page() {
           <div style={styles.navCard}>
             <div style={styles.navSectionTitle}>Current flow</div>
             <ul style={styles.miniList}>
+              <li>Enter original URL first</li>
               <li>Choose page destination</li>
-              <li>Create and download TXT first</li>
+              <li>Generate short link if needed</li>
+              <li>Create and download TXT</li>
               <li>Upload mp4 + txt together</li>
-              <li>Optionally generate short link</li>
               <li>Submit package to n8n</li>
             </ul>
           </div>
@@ -555,8 +596,8 @@ export default function Page() {
               <div style={styles.badge}>Admin Workspace</div>
               <h1 style={styles.title}>Content Upload Dashboard</h1>
               <p style={styles.subtitle}>
-                Prepare your page destination, generate TXT content, then upload the
-                video and matching TXT file together.
+                Enter the original URL, generate a short link for the selected page,
+                then prepare TXT content and upload the video and matching TXT file together.
               </p>
             </div>
           </div>
@@ -611,7 +652,7 @@ export default function Page() {
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Choose the page destination folder before generating TXT and uploading files.
+                    Choose the page destination first. The OKURL project will be detected automatically from the selected page.
                   </div>
 
                   <div style={styles.formGridTwo}>
@@ -743,41 +784,30 @@ export default function Page() {
                 <div style={styles.actionStack}>
                   <section style={styles.actionPanel}>
                     <div style={styles.actionTitle}>OKURL</div>
+
                     <div style={styles.formStack}>
                       <div>
-                        <label style={styles.label}>API Key</label>
+                        <label style={styles.label}>Original URL</label>
                         <input
                           style={styles.input}
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="okurl_xxx"
+                          value={longUrl}
+                          onChange={(e) => setLongUrl(e.target.value)}
+                          placeholder="Paste the long URL here"
                         />
                       </div>
 
-                      <div style={styles.formGridTwo}>
-                        <div>
-                          <label style={styles.label}>domain_id</label>
-                          <input
-                            style={styles.input}
-                            value={domainId}
-                            onChange={(e) => setDomainId(e.target.value)}
-                            placeholder="1"
-                          />
-                        </div>
-
-                        <div>
-                          <label style={styles.label}>project_id</label>
-                          <input
-                            style={styles.input}
-                            value={projectId}
-                            onChange={(e) => setProjectId(e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
+                      <div>
+                        <label style={styles.label}>Detected project_id</label>
+                        <input
+                          style={styles.inputReadonly}
+                          value={currentProjectId ? String(currentProjectId) : ""}
+                          readOnly
+                          placeholder="No mapping found"
+                        />
                       </div>
 
                       <div>
-                        <label style={styles.label}>Custom slug</label>
+                        <label style={styles.label}>Custom slug (optional)</label>
                         <input
                           style={styles.input}
                           value={customSlug}
@@ -789,27 +819,44 @@ export default function Page() {
                       <div>
                         <label style={styles.label}>Short URL</label>
                         <input
-                          style={styles.input}
+                          style={styles.inputReadonly}
                           value={shortUrl}
-                          onChange={(e) => setShortUrl(e.target.value)}
-                          placeholder="Generated or manually pasted"
+                          readOnly
+                          placeholder="Generated short link"
                         />
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.secondaryButton,
-                        width: "100%",
-                        opacity: creatingShortUrl ? 0.7 : 1,
-                        cursor: creatingShortUrl ? "not-allowed" : "pointer",
-                      }}
-                      onClick={generateShortUrl}
-                      disabled={creatingShortUrl}
-                    >
-                      {creatingShortUrl ? "Generating..." : "Generate Short URL"}
-                    </button>
+                    <div style={styles.inlineActions}>
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.primaryButton,
+                          opacity: creatingShortUrl ? 0.7 : 1,
+                          cursor: creatingShortUrl ? "not-allowed" : "pointer",
+                        }}
+                        onClick={generateShortUrl}
+                        disabled={creatingShortUrl}
+                      >
+                        {creatingShortUrl ? "Generating..." : "Generate Short URL"}
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.secondaryButton}
+                        onClick={copyShortUrl}
+                      >
+                        Copy
+                      </button>
+                    </div>
+
+                    {shortUrlSuccess ? (
+                      <div style={styles.successBox}>{shortUrlSuccess}</div>
+                    ) : null}
+
+                    {shortUrlError ? (
+                      <div style={styles.errorBox}>{shortUrlError}</div>
+                    ) : null}
                   </section>
 
                   <section style={styles.actionPanel}>
@@ -843,6 +890,10 @@ export default function Page() {
                       <strong>{folderName || "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
+                      <span>project_id</span>
+                      <strong>{currentProjectId ?? "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
                       <span>Files</span>
                       <strong>{files.length}</strong>
                     </div>
@@ -859,11 +910,11 @@ export default function Page() {
                   <section style={styles.actionPanel}>
                     <div style={styles.actionTitle}>Notes</div>
                     <ul style={styles.miniList}>
-                      <li>Step 1: choose page destination</li>
-                      <li>Step 2: write and download TXT</li>
-                      <li>Step 3: upload mp4 + txt together</li>
-                      <li>OKURL is optional</li>
-                      <li>Successful upload clears the working form</li>
+                      <li>Enter original URL first</li>
+                      <li>Choose page to auto-map project_id</li>
+                      <li>Generate and copy short URL if needed</li>
+                      <li>Paste short URL into TXT manually</li>
+                      <li>Download TXT and upload mp4 + txt together</li>
                     </ul>
                   </section>
                 </div>
@@ -1115,6 +1166,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     outline: "none",
     background: "#fbfcfe",
+    boxSizing: "border-box",
+  },
+  inputReadonly: {
+    width: "100%",
+    borderRadius: 14,
+    border: "1px solid #d9e1ee",
+    padding: "13px 14px",
+    fontSize: 15,
+    outline: "none",
+    background: "#f3f6fb",
+    color: "#4b5b72",
     boxSizing: "border-box",
   },
   select: {
