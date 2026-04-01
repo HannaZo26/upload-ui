@@ -38,7 +38,7 @@ type OkurlProjectOption = {
 };
 
 const SHORT_LINK_DOMAIN = "gjw.us";
-const GJW_DOMAIN_ID = "2";
+const GJW_DOMAIN_ID = "1";
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
