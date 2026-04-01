@@ -243,6 +243,22 @@ export default function Page() {
       .join("\n\n");
   }, [txtTitle, txtDescription, txtExtra]);
 
+  const resetUploadForm = () => {
+    setFiles([]);
+    setTitle("");
+    setTargetUrl("");
+    setNotes("");
+    setCustomSlug("");
+    setShortUrl("");
+    setTxtTitle("");
+    setTxtDescription("");
+    setTxtExtra("");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -463,7 +479,8 @@ export default function Page() {
         throw new Error(data?.error || data?.message || `Upload failed (${res.status})`);
       }
 
-      setSuccess(data?.message || "Submitted to n8n successfully.");
+      resetUploadForm();
+      setSuccess(data?.message || "Submitted to n8n successfully. Form has been cleared.");
       setError("");
     } catch (err: any) {
       setError(err?.message || "Submit failed.");
@@ -905,6 +922,7 @@ export default function Page() {
                       <li>Uploads go directly to page folders</li>
                       <li>TXT files are downloaded in UTF-8 format</li>
                       <li>OKURL is optional</li>
+                      <li>Successful upload clears the working form</li>
                       <li>n8n validates user and page permissions again</li>
                     </ul>
                   </section>
