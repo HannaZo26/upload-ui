@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Up">
+  <defs>
+    <linearGradient id="up-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFA54A" />
+      <stop offset="100%" stop-color="#E87413" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#up-bg)" />
+  <path
+    d="M18 20V37.2C18 46 23.6 50 32 50C40.4 50 46 46 46 37.2V14.5H39.4V37.2C39.4 41.8 36.6 44.2 32 44.2C27.4 44.2 24.6 41.8 24.6 37.2V20H18Z"
+    fill="#FFFFFF"
+  />
+  <path
+    fillRule="evenodd"
+    d="M39.4 13.8H46.8C52.1 13.8 56 17 56 22.2C56 27.2 52.2 30.6 46.8 30.6H39.4V26H46.1C48.6 26 50.2 24.5 50.2 22.2C50.2 19.9 48.6 18.4 46.1 18.4H39.4V13.8ZM44.7 19.8H46C47.4 19.8 48.2 20.7 48.2 22C48.2 23.4 47.4 24.2 46 24.2H44.7V19.8Z"
+    fill="#FFFFFF"
+  />
+</svg>
