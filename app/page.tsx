@@ -192,9 +192,8 @@ export default function Page() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authError, setAuthError] = useState("");
 
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState(
-    "https://n8n.influencerconnectagency.biz/webhook/upload-entry"
-  );
+  const n8nWebhookUrl =
+    "https://n8n.influencerconnectagency.biz/webhook/upload-entry";
 
   const [apiKey, setApiKey] = useState("");
   const [domainId, setDomainId] = useState("1");
@@ -205,13 +204,7 @@ export default function Page() {
   const [folderName, setFolderName] = useState("clearviewdaily");
   const [pageName, setPageName] = useState("clearviewdaily");
 
-  const [title, setTitle] = useState("");
-  const [targetUrl, setTargetUrl] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const [txtTitle, setTxtTitle] = useState("");
   const [txtDescription, setTxtDescription] = useState("");
-  const [txtExtra, setTxtExtra] = useState("");
 
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -236,22 +229,11 @@ export default function Page() {
     return (total / 1024 / 1024).toFixed(2);
   }, [files]);
 
-  const txtPreview = useMemo(() => {
-    return [txtTitle.trim(), txtDescription.trim(), txtExtra.trim()]
-      .filter(Boolean)
-      .join("\n\n");
-  }, [txtTitle, txtDescription, txtExtra]);
-
   const resetUploadForm = () => {
     setFiles([]);
-    setTitle("");
-    setTargetUrl("");
-    setNotes("");
     setCustomSlug("");
     setShortUrl("");
-    setTxtTitle("");
     setTxtDescription("");
-    setTxtExtra("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -326,27 +308,45 @@ export default function Page() {
   };
 
   const downloadTxt = () => {
-    if (!txtPreview) {
+    if (!txtDescription.trim()) {
       setError("Please enter TXT content before downloading.");
       setSuccess("");
       return;
     }
 
-    const blob = new Blob(["\uFEFF" + txtPreview], {
+    const blob = new Blob(["\uFEFF" + txtDescription.trim()], {
       type: "text/plain;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const safeTitle = (txtTitle || title || "content")
-      .trim()
-      .replace(/[^\w\-]+/g, "_");
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mi = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+
+    const fileName =
+      pageName +
+      "_" +
+      yyyy +
+      mm +
+      dd +
+      "_" +
+      hh +
+      mi +
+      ss +
+      ".txt";
 
     a.href = url;
-    a.download = (safeTitle || "content") + ".txt";
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+
     setSuccess("UTF-8 TXT downloaded successfully.");
     setError("");
   };
@@ -354,11 +354,6 @@ export default function Page() {
   const generateShortUrl = async () => {
     setSuccess("");
     setError("");
-
-    if (!targetUrl.trim()) {
-      setError("Please enter the original URL first.");
-      return;
-    }
 
     if (!apiKey.trim()) {
       setError("Please enter the OKURL API key.");
@@ -370,11 +365,16 @@ export default function Page() {
       return;
     }
 
+    if (!txtDescription.trim()) {
+      setError("Please paste the URL you want to shorten into the TXT generator box first.");
+      return;
+    }
+
     try {
       setCreatingShortUrl(true);
 
       const payload: Record<string, string> = {
-        url: targetUrl.trim(),
+        url: txtDescription.trim(),
         domain_id: domainId.trim(),
       };
 
@@ -427,11 +427,6 @@ export default function Page() {
       return;
     }
 
-    if (!n8nWebhookUrl.trim()) {
-      setError("Please enter your n8n webhook URL.");
-      return;
-    }
-
     if (!pageName || !folderName) {
       setError("Please choose a page and folder.");
       return;
@@ -449,9 +444,9 @@ export default function Page() {
       formData.append("username", currentUser.username);
       formData.append("page_name", pageName);
       formData.append("folder_name", folderName);
-      formData.append("title", title);
-      formData.append("target_url", targetUrl);
-      formData.append("notes", notes);
+      formData.append("title", "");
+      formData.append("target_url", "");
+      formData.append("notes", "");
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
       formData.append("project_id", projectId);
@@ -476,11 +471,17 @@ export default function Page() {
       }
 
       if (!res.ok) {
-        throw new Error(data?.error || data?.message || "Upload failed (" + String(res.status) + ")");
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            "Upload failed (" + String(res.status) + ")"
+        );
       }
 
       resetUploadForm();
-      setSuccess(data?.message || "Submitted to n8n successfully. Form has been cleared.");
+      setSuccess(
+        data?.message || "Submitted to n8n successfully. Form has been cleared."
+      );
       setError("");
     } catch (err: any) {
       setError(err?.message || "Submit failed.");
@@ -494,12 +495,39 @@ export default function Page() {
     <main style={styles.page}>
       <div style={styles.shell}>
         <aside style={styles.sidebar}>
-          <div style={styles.logoBox}>
-            <div style={styles.logoDot} />
-            <div>
-              <div style={styles.logoTitle}>Upload Console</div>
-              <div style={styles.logoSub}>Drive + OKURL + n8n</div>
+          <div>
+            <div style={styles.logoBox}>
+              <div style={styles.logoDot} />
+              <div>
+                <div style={styles.logoTitle}>Upload Console</div>
+                <div style={styles.logoSub}>Drive + OKURL + n8n</div>
+              </div>
             </div>
+
+            {currentUser ? (
+              <>
+                <div style={styles.sidebarInfoCard}>
+                  <div style={styles.sidebarInfoTitle}>Operator</div>
+                  <div style={styles.sidebarInfoName}>{currentUser.displayName}</div>
+                  <div style={styles.sidebarInfoSub}>
+                    Username: {currentUser.username}
+                  </div>
+                </div>
+
+                <div style={styles.sidebarInfoCard}>
+                  <div style={styles.sidebarInfoTitle}>Signed in</div>
+                  <div style={styles.sidebarInfoName}>
+                    {currentUser.displayName} ({currentUser.username})
+                  </div>
+                  <button
+                    style={{ ...styles.secondaryButton, width: "100%", marginTop: 12 }}
+                    onClick={handleLogout}
+                  >
+                    Log out
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div style={styles.navCard}>
@@ -512,8 +540,9 @@ export default function Page() {
           <div style={styles.navCard}>
             <div style={styles.navSectionTitle}>Current flow</div>
             <ul style={styles.miniList}>
-              <li>Login with assigned permissions</li>
-              <li>Upload files to page folder</li>
+              <li>Choose page destination</li>
+              <li>Create and download TXT first</li>
+              <li>Upload mp4 + txt together</li>
               <li>Optionally generate short link</li>
               <li>Submit package to n8n</li>
             </ul>
@@ -526,22 +555,10 @@ export default function Page() {
               <div style={styles.badge}>Admin Workspace</div>
               <h1 style={styles.title}>Content Upload Dashboard</h1>
               <p style={styles.subtitle}>
-                A cleaner backend-style interface for file upload, metadata preparation,
-                TXT generation, optional OKURL shortening, and n8n submission.
+                Prepare your page destination, generate TXT content, then upload the
+                video and matching TXT file together.
               </p>
             </div>
-
-            {currentUser ? (
-              <div style={styles.topUserBox}>
-                <div style={styles.topUserMeta}>Signed in</div>
-                <div style={styles.topUserName}>
-                  {currentUser.displayName} ({currentUser.username})
-                </div>
-                <button style={styles.secondaryButton} onClick={handleLogout}>
-                  Log out
-                </button>
-              </div>
-            ) : null}
           </div>
 
           {!currentUser ? (
@@ -589,12 +606,88 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 1</div>
+                      <div style={styles.panelTitle}>Upload settings</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.panelDesc}>
+                    Choose the page destination folder before generating TXT and uploading files.
+                  </div>
+
+                  <div style={styles.formGridTwo}>
+                    <div>
+                      <label style={styles.label}>Page Name</label>
+                      <select
+                        style={styles.select}
+                        value={pageName}
+                        onChange={(e) => setPageName(e.target.value)}
+                      >
+                        {availablePages.map((page) => (
+                          <option key={page} value={page}>
+                            {page}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={styles.label}>Google Drive Folder</label>
+                      <select
+                        style={styles.select}
+                        value={folderName}
+                        onChange={(e) => setFolderName(e.target.value)}
+                      >
+                        {availableFolders.map((folder) => (
+                          <option key={folder} value={folder}>
+                            {folder}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 2</div>
+                      <div style={styles.panelTitle}>TXT generator</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.panelDesc}>
+                    Write the TXT content, then download it before uploading.
+                  </div>
+
+                  <div style={styles.formStack}>
+                    <div>
+                      <label style={styles.label}>TXT Description</label>
+                      <textarea
+                        style={styles.textareaLarge}
+                        value={txtDescription}
+                        onChange={(e) => setTxtDescription(e.target.value)}
+                        placeholder="Write the TXT content here"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.inlineActions}>
+                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
+                      Download UTF-8 TXT
+                    </button>
+                  </div>
+                </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 3</div>
                       <div style={styles.panelTitle}>Upload files</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Drag files here or click to browse. Recommended: one <code>.mp4</code> and one matching <code>.txt</code>.
+                    After downloading the TXT file, upload the video and the matching TXT file together.
                   </div>
 
                   <div
@@ -608,7 +701,7 @@ export default function Page() {
                   >
                     <div style={styles.dropzoneTitle}>Drop files here or click to browse</div>
                     <div style={styles.dropzoneSub}>
-                      Supports video, text, image, and workflow support files
+                      Recommended: one .mp4 and one matching .txt
                     </div>
                   </div>
 
@@ -644,151 +737,10 @@ export default function Page() {
                     ))}
                   </div>
                 </section>
-
-                <section style={styles.panel}>
-                  <div style={styles.sectionHeader}>
-                    <div>
-                      <div style={styles.kicker}>Step 2</div>
-                      <div style={styles.panelTitle}>Upload settings</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.panelDesc}>
-                    Choose the page destination and prepare metadata for the upload workflow.
-                  </div>
-
-                  <div style={styles.formGridTwo}>
-                    <div>
-                      <label style={styles.label}>Page Name</label>
-                      <select
-                        style={styles.select}
-                        value={pageName}
-                        onChange={(e) => setPageName(e.target.value)}
-                      >
-                        {availablePages.map((page) => (
-                          <option key={page} value={page}>
-                            {page}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label style={styles.label}>Google Drive Folder</label>
-                      <select
-                        style={styles.select}
-                        value={folderName}
-                        onChange={(e) => setFolderName(e.target.value)}
-                      >
-                        {availableFolders.map((folder) => (
-                          <option key={folder} value={folder}>
-                            {folder}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div style={styles.formStack}>
-                    <div>
-                      <label style={styles.label}>Title</label>
-                      <input
-                        style={styles.input}
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Video title or campaign title"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={styles.label}>Original URL</label>
-                      <input
-                        style={styles.input}
-                        value={targetUrl}
-                        onChange={(e) => setTargetUrl(e.target.value)}
-                        placeholder="https://example.com/article-or-landing-page"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={styles.label}>Notes</label>
-                      <textarea
-                        style={styles.textarea}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Extra instructions for workflow processing"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section style={styles.panel}>
-                  <div style={styles.sectionHeader}>
-                    <div>
-                      <div style={styles.kicker}>Step 3</div>
-                      <div style={styles.panelTitle}>UTF-8 TXT generator</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.panelDesc}>
-                    Create text content here and download a UTF-8 TXT file for the upload package.
-                  </div>
-
-                  <div style={styles.formStack}>
-                    <div>
-                      <label style={styles.label}>TXT Title</label>
-                      <input
-                        style={styles.input}
-                        value={txtTitle}
-                        onChange={(e) => setTxtTitle(e.target.value)}
-                        placeholder="Enter TXT title"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={styles.label}>TXT Description</label>
-                      <textarea
-                        style={styles.textareaLarge}
-                        value={txtDescription}
-                        onChange={(e) => setTxtDescription(e.target.value)}
-                        placeholder="Write the main description here"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={styles.label}>Extra Text</label>
-                      <textarea
-                        style={styles.textarea}
-                        value={txtExtra}
-                        onChange={(e) => setTxtExtra(e.target.value)}
-                        placeholder="Optional CTA, hashtags, or extra notes"
-                      />
-                    </div>
-                  </div>
-
-                  <div style={styles.previewBox}>
-                    <div style={styles.previewTitle}>TXT Preview</div>
-                    <pre style={styles.previewContent}>
-                      {txtPreview || "Your TXT content preview will appear here."}
-                    </pre>
-                  </div>
-
-                  <div style={styles.inlineActions}>
-                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
-                      Download UTF-8 TXT
-                    </button>
-                  </div>
-                </section>
               </div>
 
               <aside style={styles.actionColumn}>
                 <div style={styles.actionStack}>
-                  <section style={styles.actionPanel}>
-                    <div style={styles.actionTitle}>Operator</div>
-                    <div style={styles.operatorName}>{currentUser.displayName}</div>
-                    <div style={styles.operatorSub}>Username: {currentUser.username}</div>
-                  </section>
-
                   <section style={styles.actionPanel}>
                     <div style={styles.actionTitle}>OKURL</div>
                     <div style={styles.formStack}>
@@ -862,23 +814,11 @@ export default function Page() {
 
                   <section style={styles.actionPanel}>
                     <div style={styles.actionTitle}>n8n Submission</div>
-
-                    <div>
-                      <label style={styles.label}>Webhook URL</label>
-                      <input
-                        style={styles.input}
-                        value={n8nWebhookUrl}
-                        onChange={(e) => setN8nWebhookUrl(e.target.value)}
-                        placeholder="https://your-n8n-domain/webhook/upload-entry"
-                      />
-                    </div>
-
                     <button
                       type="button"
                       style={{
                         ...styles.primaryButton,
                         width: "100%",
-                        marginTop: 14,
                         opacity: submitting ? 0.7 : 1,
                         cursor: submitting ? "not-allowed" : "pointer",
                       }}
@@ -919,11 +859,11 @@ export default function Page() {
                   <section style={styles.actionPanel}>
                     <div style={styles.actionTitle}>Notes</div>
                     <ul style={styles.miniList}>
-                      <li>Uploads go directly to page folders</li>
-                      <li>TXT files are downloaded in UTF-8 format</li>
+                      <li>Step 1: choose page destination</li>
+                      <li>Step 2: write and download TXT</li>
+                      <li>Step 3: upload mp4 + txt together</li>
                       <li>OKURL is optional</li>
                       <li>Successful upload clears the working form</li>
-                      <li>n8n validates user and page permissions again</li>
                     </ul>
                   </section>
                 </div>
@@ -962,7 +902,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     gap: 12,
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 18,
   },
   logoDot: {
     width: 14,
@@ -979,6 +919,33 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: "#94a7c6",
     marginTop: 2,
+  },
+  sidebarInfoCard: {
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sidebarInfoTitle: {
+    fontSize: 12,
+    color: "#8fa4c7",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    fontWeight: 700,
+  },
+  sidebarInfoName: {
+    fontWeight: 800,
+    fontSize: 18,
+    color: "#ffffff",
+    lineHeight: 1.3,
+  },
+  sidebarInfoSub: {
+    marginTop: 6,
+    fontSize: 13,
+    color: "#c1d2ef",
+    lineHeight: 1.5,
   },
   navCard: {
     background: "rgba(255,255,255,0.04)",
@@ -1053,24 +1020,6 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 760,
     lineHeight: 1.6,
   },
-  topUserBox: {
-    minWidth: 260,
-    background: "#ffffff",
-    border: "1px solid #e5eaf4",
-    borderRadius: 20,
-    padding: 18,
-    boxShadow: "0 10px 28px rgba(24, 39, 75, 0.06)",
-  },
-  topUserMeta: {
-    fontSize: 12,
-    color: "#7d8898",
-    marginBottom: 6,
-  },
-  topUserName: {
-    fontWeight: 800,
-    fontSize: 20,
-    marginBottom: 14,
-  },
   loginWrap: {
     maxWidth: 620,
   },
@@ -1138,15 +1087,6 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.6,
     marginBottom: 18,
   },
-  operatorName: {
-    fontSize: 20,
-    fontWeight: 800,
-    marginBottom: 6,
-  },
-  operatorSub: {
-    color: "#6c7a90",
-    fontSize: 14,
-  },
   formGrid: {
     display: "grid",
     gap: 14,
@@ -1187,21 +1127,9 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#fbfcfe",
     boxSizing: "border-box",
   },
-  textarea: {
-    width: "100%",
-    minHeight: 100,
-    borderRadius: 14,
-    border: "1px solid #d9e1ee",
-    padding: "13px 14px",
-    fontSize: 15,
-    outline: "none",
-    background: "#fbfcfe",
-    resize: "vertical",
-    boxSizing: "border-box",
-  },
   textareaLarge: {
     width: "100%",
-    minHeight: 180,
+    minHeight: 220,
     borderRadius: 14,
     border: "1px solid #d9e1ee",
     padding: "13px 14px",
@@ -1276,29 +1204,6 @@ const styles: Record<string, React.CSSProperties> = {
   fileMeta: {
     color: "#6b7789",
     fontSize: 13,
-  },
-  previewBox: {
-    marginTop: 8,
-    borderRadius: 18,
-    border: "1px solid #e3eaf6",
-    background: "#f8fbff",
-    overflow: "hidden",
-  },
-  previewTitle: {
-    padding: "12px 14px",
-    fontWeight: 800,
-    borderBottom: "1px solid #e3eaf6",
-    background: "#f1f6ff",
-  },
-  previewContent: {
-    margin: 0,
-    padding: 16,
-    fontFamily:
-      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontSize: 13,
-    whiteSpace: "pre-wrap",
-    color: "#314255",
-    minHeight: 90,
   },
   inlineActions: {
     display: "flex",
