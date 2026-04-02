@@ -64,6 +64,7 @@ const SHORTS_RANGE_PRESETS = [
   { label: "Full video", start: "", end: "" },
   { label: "First 3 min", start: "00:00", end: "03:00" },
   { label: "First 5 min", start: "00:00", end: "05:00" },
+  { label: "First 8 min", start: "00:00", end: "08:00" },
   { label: "05:00 - 10:00", start: "05:00", end: "10:00" },
 ];
 const WORKFLOW_STEPS = [
@@ -735,6 +736,7 @@ export default function Page() {
   const [shortsError, setShortsError] = useState("");
   const [shortsJobId, setShortsJobId] = useState("");
   const [shortsJobStatus, setShortsJobStatus] = useState("");
+  const [shortsJobProgress, setShortsJobProgress] = useState<number | null>(null);
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
@@ -1011,6 +1013,7 @@ export default function Page() {
     setShortsError("");
     setShortsJobId("");
     setShortsJobStatus("");
+    setShortsJobProgress(null);
     setAddingShortsToUploads(false);
     setAddingTxtsToUploads(false);
 
@@ -1074,6 +1077,7 @@ export default function Page() {
     setShortsError("");
     setShortsJobId("");
     setShortsJobStatus("");
+    setShortsJobProgress(null);
     setAddingShortsToUploads(false);
     setAddingTxtsToUploads(false);
   };
@@ -1212,6 +1216,7 @@ export default function Page() {
       setSelectedShortIds([]);
       setShortsJobId("");
       setShortsJobStatus("");
+      setShortsJobProgress(null);
 
       const createRes = await fetch("/api/shortsgen/jobs", {
         method: "POST",
@@ -1242,6 +1247,7 @@ export default function Page() {
 
       setShortsJobId(jobId);
       setShortsJobStatus("SCHEDULED");
+      setShortsJobProgress(0);
       setShortsSuccess(
         `Shorts job created for ${shortsRangeSummary.toLowerCase()}. Generating clips now...`
       );
@@ -1264,8 +1270,33 @@ export default function Page() {
 
         finalStatus = pickFirstString(statusData?.status).toUpperCase();
         setShortsJobStatus(finalStatus);
+        const explicitProgressRaw =
+          typeof statusData?.progress === "number" ||
+          typeof statusData?.progress === "string"
+            ? Number(statusData.progress)
+            : null;
+        const explicitProgress =
+          explicitProgressRaw !== null && Number.isFinite(explicitProgressRaw)
+            ? Math.max(0, Math.min(100, Math.round(explicitProgressRaw)))
+            : null;
+        const estimatedProgress =
+          finalStatus === "COMPLETED"
+            ? 100
+            : finalStatus === "SCHEDULED"
+            ? 5
+            : finalStatus === "IN_PROGRESS"
+            ? Math.min(
+                95,
+                Math.max(
+                  12,
+                  Math.round(((attempt + 1) / SHORTSGEN_MAX_POLL_ATTEMPTS) * 100)
+                )
+              )
+            : null;
+        setShortsJobProgress(explicitProgress ?? estimatedProgress);
 
         if (finalStatus === "COMPLETED") {
+          setShortsJobProgress(100);
           break;
         }
 
@@ -1315,6 +1346,7 @@ export default function Page() {
 
       setShortsClips(clips);
       setSelectedShortIds(clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id));
+      setShortsJobProgress(100);
       setShortsSuccess(
         `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`
       );
@@ -2118,6 +2150,16 @@ export default function Page() {
 
                         <div>
                           <label style={styles.label}>Time range</label>
+                          <div style={styles.timeframeToolbar}>
+                            <div style={styles.timeframeTitle}>Select timeframe</div>
+                            <button
+                              type="button"
+                              style={styles.timeframeReset}
+                              onClick={() => applyShortsRangePreset("", "")}
+                            >
+                              Reset
+                            </button>
+                          </div>
                           <div style={styles.rangeFieldGrid}>
                             <div>
                               <input
@@ -2189,6 +2231,9 @@ export default function Page() {
                           {shortsJobStatus ? (
                             <div style={styles.statusPill}>{shortsJobStatus}</div>
                           ) : null}
+                          {shortsJobProgress !== null ? (
+                            <div style={styles.progressPill}>{shortsJobProgress}%</div>
+                          ) : null}
                           <div style={styles.selectionPill}>
                             {selectedShortIds.length} selected
                           </div>
@@ -2197,6 +2242,23 @@ export default function Page() {
 
                       {shortsJobId ? (
                         <div style={styles.helperText}>Job ID: {shortsJobId}</div>
+                      ) : null}
+
+                      {shortsJobProgress !== null && shortsJobStatus !== "FAILED" ? (
+                        <div style={styles.progressCard}>
+                          <div style={styles.progressRow}>
+                            <div style={styles.progressLabel}>Generation progress</div>
+                            <div style={styles.progressValue}>{shortsJobProgress}%</div>
+                          </div>
+                          <div style={styles.progressTrack}>
+                            <div
+                              style={{
+                                ...styles.progressFill,
+                                width: `${shortsJobProgress}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       ) : null}
 
                       {shortsClips.length ? (
@@ -2831,25 +2893,45 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 8,
     padding: 6,
-    borderRadius: 16,
-    background: "#eef4ff",
-    border: "1px solid #d8e3f5",
+    borderRadius: 20,
+    background: "#eaf0fa",
+    border: "1px solid #d4dff0",
     flexWrap: "wrap",
   },
   segmentedButton: {
     border: "none",
     background: "transparent",
-    color: "#5a6f8e",
-    borderRadius: 12,
-    padding: "10px 14px",
+    color: "#5f718d",
+    borderRadius: 16,
+    padding: "12px 18px",
     fontWeight: 800,
-    fontSize: 14,
+    fontSize: 15,
     cursor: "pointer",
   },
   segmentedButtonActive: {
     background: "#ffffff",
-    color: "#214a8c",
-    boxShadow: "0 8px 18px rgba(33, 74, 140, 0.12)",
+    color: "#2c5df7",
+    boxShadow: "0 8px 18px rgba(44, 93, 247, 0.14)",
+  },
+  timeframeToolbar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 10,
+  },
+  timeframeTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#64748b",
+  },
+  timeframeReset: {
+    border: "none",
+    background: "transparent",
+    color: "#3b82f6",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
+    padding: 0,
   },
   rangeFieldGrid: {
     display: "grid",
@@ -3090,6 +3172,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     whiteSpace: "nowrap",
   },
+  progressPill: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#eef4ff",
+    color: "#2c5df7",
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  },
   selectionPill: {
     borderRadius: 999,
     padding: "6px 10px",
@@ -3098,6 +3189,44 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 700,
     whiteSpace: "nowrap",
+  },
+  progressCard: {
+    marginTop: 12,
+    marginBottom: 16,
+    borderRadius: 16,
+    border: "1px solid #dbe7fb",
+    background: "#ffffff",
+    padding: "14px 16px",
+  },
+  progressRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
+  },
+  progressLabel: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#5e7392",
+  },
+  progressValue: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#2c5df7",
+  },
+  progressTrack: {
+    width: "100%",
+    height: 10,
+    borderRadius: 999,
+    background: "#e6efff",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    background: "linear-gradient(90deg, #4b7cff 0%, #2c5df7 100%)",
+    transition: "width 240ms ease",
   },
   shortsClipList: {
     display: "grid",
