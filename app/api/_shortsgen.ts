@@ -1,0 +1,303 @@
+import { NextResponse } from "next/server";
+
+const SHORTSGEN_API_BASE = "https://shortsgen.ganjingworld.com";
+
+export type NormalizedShortsClip = {
+  id: string;
+  title: string;
+  description: string;
+  duration: string;
+  angle: string;
+  downloadUrl: string;
+  thumbnailUrl: string;
+  qualityLabel: string;
+  qualityScore: number | null;
+  rank: number;
+};
+
+export const pickFirstString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return "";
+};
+
+export const pickFirstNumber = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+};
+
+export const getShortsgenHeaders = (includeJson = false) => {
+  const apiKey = process.env.SHORTSGEN_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("SHORTSGEN_API_KEY is not configured on the server.");
+  }
+
+  return {
+    "X-API-Key": apiKey,
+    ...(includeJson ? { "Content-Type": "application/json" } : {}),
+  };
+};
+
+export const shortsgenRequest = async (
+  path: string,
+  init?: RequestInit & { includeJson?: boolean }
+) => {
+  const response = await fetch(`${SHORTSGEN_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...getShortsgenHeaders(Boolean(init?.includeJson)),
+      ...(init?.headers || {}),
+    },
+    cache: "no-store",
+  });
+
+  const text = await response.text();
+  let data: any = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+  };
+};
+
+export const extractContentId = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  } catch {
+    return trimmed.replace(/^\/+|\/+$/g, "");
+  }
+};
+
+export const normalizeShortsgenStatus = (data: any) =>
+  pickFirstString(
+    data?.status,
+    data?.job_status,
+    data?.state,
+    data?.data?.status,
+    data?.data?.job_status,
+    data?.data?.state
+  ).toUpperCase();
+
+const formatSeconds = (totalSeconds: number | null) => {
+  if (totalSeconds === null || !Number.isFinite(totalSeconds)) {
+    return "Unknown length";
+  }
+
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+
+  if (hours > 0) {
+    return [hours, minutes, remainder]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+  }
+
+  return [minutes, remainder]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+};
+
+const deriveDuration = (item: any) => {
+  const directDuration = pickFirstString(
+    item?.duration,
+    item?.duration_text,
+    item?.duration_label
+  );
+
+  if (directDuration) return directDuration;
+
+  const durationSeconds = pickFirstNumber(
+    item?.duration_sec,
+    item?.duration_seconds,
+    item?.durationSecs,
+    item?.clip_duration_sec
+  );
+
+  if (durationSeconds !== null) {
+    return formatSeconds(durationSeconds);
+  }
+
+  const startSec = pickFirstNumber(item?.start_sec, item?.start, item?.startSec);
+  const endSec = pickFirstNumber(item?.end_sec, item?.end, item?.endSec);
+
+  if (startSec !== null && endSec !== null && endSec >= startSec) {
+    return formatSeconds(endSec - startSec);
+  }
+
+  return "Auto clip";
+};
+
+const deriveAngle = (item: any) =>
+  pickFirstString(
+    item?.angle,
+    item?.reason,
+    item?.hook,
+    item?.highlight,
+    item?.theme,
+    item?.clip_type
+  ) || "AI-selected highlight";
+
+const deriveDescription = (item: any) =>
+  pickFirstString(
+    item?.description,
+    item?.desc,
+    item?.summary,
+    item?.caption,
+    item?.clip_description,
+    item?.clipDescription,
+    item?.transcript,
+    item?.copy,
+    item?.text
+  );
+
+const deriveQualityScore = (item: any, index: number) => {
+  const rawScore = pickFirstNumber(
+    item?.quality_score,
+    item?.qualityScore,
+    item?.overall_score,
+    item?.overallScore,
+    item?.score,
+    item?.confidence,
+    item?.rank_score,
+    item?.ranking_score
+  );
+
+  if (rawScore === null) return Math.max(0, 100 - index * 8);
+  if (rawScore <= 1) return Math.round(rawScore * 100);
+  return Math.round(rawScore);
+};
+
+const deriveQualityLabel = (score: number) => {
+  if (score >= 90) return "Best pick";
+  if (score >= 78) return "Strong pick";
+  if (score >= 65) return "Good option";
+  return "Review";
+};
+
+const coerceResultsArray = (data: any) => {
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.data?.results)) return data.data.results;
+  if (Array.isArray(data?.clips)) return data.clips;
+  if (Array.isArray(data?.data?.clips)) return data.data.clips;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data)) return data.data;
+
+  const directUrl = pickFirstString(
+    data?.shorts_url,
+    data?.shortsUrl,
+    data?.short_url,
+    data?.url,
+    data?.download_url
+  );
+
+  if (directUrl) return [data];
+
+  return [];
+};
+
+export const normalizeShortsgenResults = (data: any): NormalizedShortsClip[] => {
+  const clips = coerceResultsArray(data)
+    .map((item: any, index: number) => {
+      const downloadUrl = pickFirstString(
+        item?.shorts_url,
+        item?.shortsUrl,
+        item?.short_url,
+        item?.url,
+        item?.download_url,
+        item?.downloadUrl
+      );
+
+      if (!downloadUrl) return null;
+
+      const thumbnailUrl = pickFirstString(
+        item?.shorts_thb_url,
+        item?.shortsThbUrl,
+        item?.thumbnail_url,
+        item?.thumbnailUrl,
+        item?.thumb_url,
+        item?.poster_url
+      );
+
+      const qualityScore = deriveQualityScore(item, index);
+
+      return {
+        id:
+          pickFirstString(
+            item?.id,
+            item?.clip_id,
+            item?.clipId,
+            item?.short_id,
+            item?.shortId
+          ) || `clip-${index + 1}`,
+        title:
+          pickFirstString(
+            item?.title,
+            item?.headline,
+            item?.clip_title,
+            item?.clipTitle,
+            item?.name
+          ) || `Short clip ${index + 1}`,
+        description: deriveDescription(item),
+        duration: deriveDuration(item),
+        angle: deriveAngle(item),
+        downloadUrl,
+        thumbnailUrl,
+        qualityLabel: deriveQualityLabel(qualityScore),
+        qualityScore,
+        rank: index + 1,
+      };
+    })
+    .filter(Boolean) as NormalizedShortsClip[];
+
+  return clips
+    .sort((a, b) => {
+      if (b.qualityScore !== a.qualityScore) {
+        return (b.qualityScore || 0) - (a.qualityScore || 0);
+      }
+      return a.rank - b.rank;
+    })
+    .map((clip, index) => ({
+      ...clip,
+      rank: index + 1,
+    }));
+};
+
+export const errorResponse = (error: unknown, status = 500) => {
+  const message =
+    error instanceof Error ? error.message : "Unexpected ShortsGen proxy error.";
+
+  return NextResponse.json({ error: message }, { status });
+};
