@@ -82,6 +82,17 @@ const WORKFLOW_STEPS = [
   "Upload the mp4 and matching txt",
   "Review the summary and start automation",
 ];
+const DEMO_X_ACCOUNTS = ["X Demo Newsdesk", "X Demo Spotlight", "X Demo Trends"];
+const DEMO_YOUTUBE_ACCOUNTS = [
+  "YouTube Demo Studio A",
+  "YouTube Demo Studio B",
+  "YouTube Demo Studio C",
+];
+const DEMO_TIKTOK_ACCOUNTS = [
+  "TikTok Demo Channel A",
+  "TikTok Demo Channel B",
+  "TikTok Demo Channel C",
+];
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -788,18 +799,18 @@ export default function Page() {
 
   const availableXAccounts = useMemo(() => {
     if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.xAccounts ?? availablePages;
-  }, [availablePages, currentUser]);
+    return demoUsers[currentUser.username]?.xAccounts ?? DEMO_X_ACCOUNTS;
+  }, [currentUser]);
 
   const availableYoutubeAccounts = useMemo(() => {
     if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.youtubeAccounts ?? availablePages;
-  }, [availablePages, currentUser]);
+    return demoUsers[currentUser.username]?.youtubeAccounts ?? DEMO_YOUTUBE_ACCOUNTS;
+  }, [currentUser]);
 
   const availableTiktokAccounts = useMemo(() => {
     if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.tiktokAccounts ?? availablePages;
-  }, [availablePages, currentUser]);
+    return demoUsers[currentUser.username]?.tiktokAccounts ?? DEMO_TIKTOK_ACCOUNTS;
+  }, [currentUser]);
 
   const totalSizeMb = useMemo(() => {
     const total = files.reduce((sum, file) => sum + file.size, 0);
@@ -1088,16 +1099,12 @@ export default function Page() {
       ) ??
       user.folders[0] ??
       firstPage;
-    const firstXAccount = user.xAccounts?.[0] ?? firstPage;
-    const firstYoutubeAccount = user.youtubeAccounts?.[0] ?? firstPage;
-    const firstTiktokAccount = user.tiktokAccounts?.[0] ?? firstPage;
-
     setCurrentUser({ username });
     setFolderName(firstFolder);
     setPageName(firstPage);
-    setXAccountName(firstXAccount);
-    setYoutubeAccountName(firstYoutubeAccount);
-    setTiktokAccountName(firstTiktokAccount);
+    setXAccountName("");
+    setYoutubeAccountName("");
+    setTiktokAccountName("");
     setSignUpWallEnabled(false);
     setLoginPassword("");
   };
@@ -1781,9 +1788,6 @@ export default function Page() {
       formData.append("page_name", pageName);
       formData.append("folder_name", effectiveFolderName);
       formData.append("facebook_page", pageName);
-      formData.append("x_account", xAccountName);
-      formData.append("youtube_account", youtubeAccountName);
-      formData.append("tiktok_account", tiktokAccountName);
       formData.append("title", "");
       formData.append("target_url", longUrlWithUtm || longUrl);
       formData.append("notes", combinedTxtNotes);
@@ -1976,6 +1980,7 @@ export default function Page() {
                         value={xAccountName}
                         onChange={(e) => setXAccountName(e.target.value)}
                       >
+                        <option value="">Not selected (Demo only)</option>
                         {availableXAccounts.length ? (
                           availableXAccounts.map((account) => (
                             <option key={account} value={account}>
@@ -1995,6 +2000,7 @@ export default function Page() {
                         value={youtubeAccountName}
                         onChange={(e) => setYoutubeAccountName(e.target.value)}
                       >
+                        <option value="">Not selected (Demo only)</option>
                         {availableYoutubeAccounts.length ? (
                           availableYoutubeAccounts.map((account) => (
                             <option key={account} value={account}>
@@ -2014,6 +2020,7 @@ export default function Page() {
                         value={tiktokAccountName}
                         onChange={(e) => setTiktokAccountName(e.target.value)}
                       >
+                        <option value="">Not selected (Demo only)</option>
                         {availableTiktokAccounts.length ? (
                           availableTiktokAccounts.map((account) => (
                             <option key={account} value={account}>
@@ -2025,6 +2032,12 @@ export default function Page() {
                         )}
                       </select>
                     </div>
+                  </div>
+
+                  <div style={styles.helperText}>
+                    Facebook Page is the only platform currently connected to automation.
+                    X, YouTube, and TikTok are optional demo fields and will not affect Start
+                    automation if you leave them unselected.
                   </div>
                 </section>
 
