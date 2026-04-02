@@ -348,7 +348,11 @@ const buildUtmQueryString = (fields: UtmBuilderFields) => {
   return query ? `?${query}` : "";
 };
 
-const buildUrlWithUtm = (baseUrl: string, fields: UtmBuilderFields) => {
+const buildUrlWithUtm = (
+  baseUrl: string,
+  fields: UtmBuilderFields,
+  signUpWallEnabled = false
+) => {
   const trimmed = baseUrl.trim();
   if (!trimmed) return "";
 
@@ -361,6 +365,9 @@ const buildUrlWithUtm = (baseUrl: string, fields: UtmBuilderFields) => {
   if (fields.content.trim()) params.set("utm_content", fields.content.trim());
   if (fields.sourcePlatform.trim()) {
     params.set("utm_source_platform", fields.sourcePlatform.trim());
+  }
+  if (signUpWallEnabled) {
+    params.set("softsignup", "on");
   }
 
   if (!params.toString()) {
@@ -848,8 +855,8 @@ export default function Page() {
   }, [utmFields]);
 
   const longUrlWithUtm = useMemo(() => {
-    return buildUrlWithUtm(longUrl, utmFields);
-  }, [longUrl, utmFields]);
+    return buildUrlWithUtm(longUrl, utmFields, signUpWallEnabled);
+  }, [longUrl, signUpWallEnabled, utmFields]);
 
   const combinedTxtNotes = useMemo(() => {
     return txtDescriptions
@@ -1689,7 +1696,6 @@ export default function Page() {
           domain_id: selectedDomain.id,
           path_prefix: selectedDomain.pathPrefix || "s",
           slug: customSlug.trim() || undefined,
-          sign_up_wall: signUpWallEnabled,
         }),
       });
 
@@ -2258,8 +2264,8 @@ export default function Page() {
                             <span style={styles.toggleLabel}>Sign-up Wall</span>
                           </label>
                           <div style={styles.helperText}>
-                            Show the OKURL sign-up wall before redirecting to the original
-                            URL.
+                            Appends `&softsignup=on` to the final target URL before creating
+                            the short link.
                           </div>
                         </div>
                       </div>
@@ -2293,17 +2299,6 @@ export default function Page() {
                           onChange={(e) => setShortsSourceUrl(e.target.value)}
                           placeholder="Paste the long video URL here"
                         />
-                        <div style={styles.helperText}>
-                          API:{" "}
-                          <a
-                            href="https://shortsgen.ganjingworld.com/"
-                            target="_blank"
-                            rel="noreferrer"
-                            style={styles.inlineLink}
-                          >
-                            shortsgen.ganjingworld.com
-                          </a>
-                        </div>
                       </div>
 
                       <div style={styles.formStack}>
