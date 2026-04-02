@@ -62,6 +62,7 @@ const SHORTSGEN_POLL_INTERVAL_MS = 6000;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
 const SHORTS_RANGE_PRESETS = [
   { label: "Full video", start: "", end: "" },
+  { label: "First 2 min", start: "00:00", end: "02:00" },
   { label: "First 3 min", start: "00:00", end: "03:00" },
   { label: "First 5 min", start: "00:00", end: "05:00" },
   { label: "First 8 min", start: "00:00", end: "08:00" },
@@ -392,6 +393,23 @@ const readResponseData = async (response: Response) => {
 
 const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
   return `video${index + 1}.${extension}`;
+};
+
+const readDownloadFileName = (contentDisposition: string | null) => {
+  if (!contentDisposition) return "";
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const basicMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+  return basicMatch?.[1]?.trim() || "";
 };
 
 const parseTimecodeToSeconds = (value: string) => {
@@ -730,6 +748,7 @@ export default function Page() {
   const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
   const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
   const [generatingShorts, setGeneratingShorts] = useState(false);
+  const [downloadingShorts, setDownloadingShorts] = useState(false);
   const [addingShortsToUploads, setAddingShortsToUploads] = useState(false);
   const [addingTxtsToUploads, setAddingTxtsToUploads] = useState(false);
   const [shortsSuccess, setShortsSuccess] = useState("");
@@ -1359,7 +1378,7 @@ export default function Page() {
     }
   };
 
-  const downloadSelectedShorts = () => {
+  const downloadSelectedShorts = async () => {
     setShortsError("");
     setShortsSuccess("");
 
@@ -1368,20 +1387,57 @@ export default function Page() {
       return;
     }
 
-    const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
+    try {
+      setDownloadingShorts(true);
 
-    selectedClips.forEach((clip, index) => {
+      const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
+      const archive = selectedClips.length > 1;
+
+      const res = await fetch("/api/shortsgen/download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          archive,
+          files: selectedClips.map((clip, index) => ({
+            url: clip.downloadUrl,
+            fileName: buildSequentialFileName(index, "mp4"),
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await readResponseData(res);
+        throw new Error(
+          data?.error || data?.message || "Failed to download the selected shorts."
+        );
+      }
+
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = clip.downloadUrl;
-      anchor.download = buildSequentialFileName(index, "mp4");
-      anchor.target = "_blank";
-      anchor.rel = "noreferrer";
+      const fileName =
+        readDownloadFileName(res.headers.get("content-disposition")) ||
+        (archive ? "selected-shorts.zip" : buildSequentialFileName(0, "mp4"));
+
+      anchor.href = objectUrl;
+      anchor.download = fileName;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-    });
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 
-    setShortsSuccess(`${selectedClips.length} short(s) download started.`);
+      setShortsSuccess(
+        archive
+          ? `${selectedClips.length} short(s) were bundled into one download.`
+          : "Short download started."
+      );
+    } catch (err: any) {
+      setShortsError(err?.message || "Failed to download the selected shorts.");
+    } finally {
+      setDownloadingShorts(false);
+    }
   };
 
   const addSelectedShortsToUploadList = async () => {
@@ -2389,10 +2445,15 @@ export default function Page() {
                       <div style={styles.inlineActions}>
                         <button
                           type="button"
-                          style={styles.secondaryButton}
+                          style={{
+                            ...styles.secondaryButton,
+                            opacity: downloadingShorts ? 0.7 : 1,
+                            cursor: downloadingShorts ? "not-allowed" : "pointer",
+                          }}
                           onClick={downloadSelectedShorts}
+                          disabled={downloadingShorts}
                         >
-                          Download selected shorts
+                          {downloadingShorts ? "Preparing download..." : "Download selected shorts"}
                         </button>
                         <button
                           type="button"
@@ -3315,16 +3376,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortsClipList: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 18,
+    gridTemplateColumns: "repeat(auto-fit, minmax(205px, 1fr))",
+    gap: 16,
   },
   shortsClipCard: {
     display: "grid",
     alignContent: "start",
-    gap: 12,
+    gap: 10,
     border: "1px solid #d8e3f5",
     borderRadius: 20,
-    padding: "14px",
+    padding: "12px",
     cursor: "pointer",
     boxShadow: "0 10px 24px rgba(16, 35, 63, 0.06)",
   },
@@ -3345,11 +3406,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortsClipPreview: {
     width: "100%",
-    maxWidth: 220,
+    maxWidth: 196,
     aspectRatio: "9 / 16",
     height: "auto",
     objectFit: "cover",
-    borderRadius: 18,
+    borderRadius: 16,
     border: "1px solid #dce7f7",
     background: "#f3f7fd",
   },
@@ -3359,7 +3420,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
   },
   shortsClipTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 800,
     color: "#0d2242",
     lineHeight: 1.35,
@@ -3375,7 +3436,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   shortsClipMeta: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#627590",
     lineHeight: 1.6,
   },
