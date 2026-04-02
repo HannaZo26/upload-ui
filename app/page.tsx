@@ -54,10 +54,18 @@ type ShortsClipOption = {
   rank: number;
 };
 
+type ShortsGenerationMode = "aiClipping" | "manualSelected";
+
 const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_POLL_INTERVAL_MS = 6000;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 40;
+const SHORTS_RANGE_PRESETS = [
+  { label: "Full video", start: "", end: "" },
+  { label: "First 3 min", start: "00:00", end: "03:00" },
+  { label: "First 5 min", start: "00:00", end: "05:00" },
+  { label: "05:00 - 10:00", start: "05:00", end: "10:00" },
+];
 const WORKFLOW_STEPS = [
   "Choose page and folder destination",
   "Generate the OKURL short link",
@@ -385,6 +393,60 @@ const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
   return `video${index + 1}.${extension}`;
 };
 
+const parseTimecodeToSeconds = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  const parts = trimmed.split(":").map((part) => part.trim());
+
+  if (
+    !parts.length ||
+    parts.length > 3 ||
+    parts.some((part) => !/^\d+$/.test(part))
+  ) {
+    return null;
+  }
+
+  const numericParts = parts.map((part) => Number(part));
+
+  if (numericParts.some((part) => !Number.isFinite(part))) {
+    return null;
+  }
+
+  if (numericParts.length === 3) {
+    const [hours, minutes, seconds] = numericParts;
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  if (numericParts.length === 2) {
+    const [minutes, seconds] = numericParts;
+    return minutes * 60 + seconds;
+  }
+
+  return numericParts[0] ?? null;
+};
+
+const formatSecondsAsTimecode = (totalSeconds: number) => {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+
+  if (hours > 0) {
+    return [hours, minutes, remainder]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+  }
+
+  return [minutes, remainder]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+};
+
 const replaceGeneratedFiles = (
   existingFiles: File[],
   incomingFiles: File[],
@@ -660,6 +722,10 @@ export default function Page() {
   const [shortUrlError, setShortUrlError] = useState("");
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
   const [shortsSourceUrl, setShortsSourceUrl] = useState("");
+  const [shortsMode, setShortsMode] =
+    useState<ShortsGenerationMode>("aiClipping");
+  const [shortsRangeStart, setShortsRangeStart] = useState("");
+  const [shortsRangeEnd, setShortsRangeEnd] = useState("");
   const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
   const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
   const [generatingShorts, setGeneratingShorts] = useState(false);
@@ -738,6 +804,21 @@ export default function Page() {
       .filter(Boolean)
       .join("\n\n");
   }, [txtDescriptions]);
+
+  const shortsRangeSummary = useMemo(() => {
+    const startSec = parseTimecodeToSeconds(shortsRangeStart);
+    const endSec = parseTimecodeToSeconds(shortsRangeEnd);
+
+    if (startSec === null && endSec === null) {
+      return "Full video";
+    }
+
+    if (startSec !== null && endSec !== null && endSec > startSec) {
+      return `${formatSecondsAsTimecode(startSec)} - ${formatSecondsAsTimecode(endSec)}`;
+    }
+
+    return "Custom range";
+  }, [shortsRangeStart, shortsRangeEnd]);
 
   useEffect(() => {
     const loadDomains = async () => {
@@ -921,6 +1002,9 @@ export default function Page() {
     setShortUrlError("");
     setShortUrlSuccess("");
     setShortsSourceUrl("");
+    setShortsMode("aiClipping");
+    setShortsRangeStart("");
+    setShortsRangeEnd("");
     setShortsClips([]);
     setSelectedShortIds([]);
     setShortsSuccess("");
@@ -981,6 +1065,9 @@ export default function Page() {
     setSelectedUtmTemplateKey("");
     setUtmFields(EMPTY_UTM_FIELDS);
     setShortsSourceUrl("");
+    setShortsMode("aiClipping");
+    setShortsRangeStart("");
+    setShortsRangeEnd("");
     setShortsClips([]);
     setSelectedShortIds([]);
     setShortsSuccess("");
@@ -1049,6 +1136,14 @@ export default function Page() {
     }));
   };
 
+  const applyShortsRangePreset = (start: string, end: string) => {
+    if (!start && !end && shortsMode === "manualSelected") {
+      setShortsMode("aiClipping");
+    }
+    setShortsRangeStart(start);
+    setShortsRangeEnd(end);
+  };
+
   const generateShorts = async () => {
     setShortsError("");
     setShortsSuccess("");
@@ -1057,6 +1152,59 @@ export default function Page() {
       setShortsError("Please enter the long-video URL first.");
       return;
     }
+
+    const startSec = parseTimecodeToSeconds(shortsRangeStart);
+    const endSec = parseTimecodeToSeconds(shortsRangeEnd);
+    const hasRangeInput =
+      Boolean(shortsRangeStart.trim()) || Boolean(shortsRangeEnd.trim());
+
+    if (hasRangeInput && (startSec === null || endSec === null)) {
+      setShortsError("Please enter a valid start and end time like 00:00 or 05:30.");
+      return;
+    }
+
+    if (startSec !== null && endSec !== null && endSec <= startSec) {
+      setShortsError("The end time must be later than the start time.");
+      return;
+    }
+
+    if (shortsMode === "manualSelected" && !hasRangeInput) {
+      setShortsError("Manual Selection needs a start and end time range.");
+      return;
+    }
+
+    const shortsOptions =
+      shortsMode === "manualSelected"
+        ? {
+            mode: "manualSelected",
+            user_selected: {
+              time_ranges: [
+                {
+                  start_sec: startSec,
+                  end_sec: endSec,
+                },
+              ],
+            },
+          }
+        : hasRangeInput
+        ? {
+            mode: "aiClipping",
+            user_selected: {
+              full_length: false,
+              time_ranges: [
+                {
+                  start_sec: startSec,
+                  end_sec: endSec,
+                },
+              ],
+            },
+          }
+        : {
+            mode: "aiClipping",
+            user_selected: {
+              full_length: true,
+            },
+          };
 
     try {
       setGeneratingShorts(true);
@@ -1072,9 +1220,7 @@ export default function Page() {
         },
         body: JSON.stringify({
           source_url: shortsSourceUrl.trim(),
-          options: {
-            mode: "aiClipping",
-          },
+          options: shortsOptions,
         }),
       });
 
@@ -1096,7 +1242,9 @@ export default function Page() {
 
       setShortsJobId(jobId);
       setShortsJobStatus("SCHEDULED");
-      setShortsSuccess("Shorts job created. Generating clips now...");
+      setShortsSuccess(
+        `Shorts job created for ${shortsRangeSummary.toLowerCase()}. Generating clips now...`
+      );
 
       let finalStatus = "";
 
@@ -1905,7 +2053,8 @@ export default function Page() {
                     Paste a Gan Jing World long-video URL to generate short clips, review
                     the strongest options, and copy helpful titles or descriptions into
                     your TXT writing below before adding the best shorts into the upload
-                    files list.
+                    files list. For long videos, limit the time range first so ShortsGen
+                    can finish much faster.
                   </div>
 
                   <div style={styles.shortsPanel}>
@@ -1928,6 +2077,92 @@ export default function Page() {
                           >
                             shortsgen.ganjingworld.com
                           </a>
+                        </div>
+                      </div>
+
+                      <div style={styles.formStack}>
+                        <div>
+                          <label style={styles.label}>Clipping mode</label>
+                          <div style={styles.segmentedControl}>
+                            <button
+                              type="button"
+                              style={{
+                                ...styles.segmentedButton,
+                                ...(shortsMode === "aiClipping"
+                                  ? styles.segmentedButtonActive
+                                  : null),
+                              }}
+                              onClick={() => setShortsMode("aiClipping")}
+                            >
+                              AI Clipping
+                            </button>
+                            <button
+                              type="button"
+                              style={{
+                                ...styles.segmentedButton,
+                                ...(shortsMode === "manualSelected"
+                                  ? styles.segmentedButtonActive
+                                  : null),
+                              }}
+                              onClick={() => setShortsMode("manualSelected")}
+                            >
+                              Manual Selection
+                            </button>
+                          </div>
+                          <div style={styles.helperText}>
+                            AI Clipping finds the best clips inside your chosen range.
+                            Manual Selection is stricter and only uses the exact range
+                            you provide.
+                          </div>
+                        </div>
+
+                        <div>
+                          <label style={styles.label}>Time range</label>
+                          <div style={styles.rangeFieldGrid}>
+                            <div>
+                              <input
+                                style={styles.input}
+                                value={shortsRangeStart}
+                                onChange={(e) => setShortsRangeStart(e.target.value)}
+                                placeholder="Start, e.g. 00:00"
+                              />
+                            </div>
+                            <div>
+                              <input
+                                style={styles.input}
+                                value={shortsRangeEnd}
+                                onChange={(e) => setShortsRangeEnd(e.target.value)}
+                                placeholder="End, e.g. 05:00"
+                              />
+                            </div>
+                          </div>
+                          <div style={styles.helperText}>
+                            Leave both blank to use the full video in AI Clipping mode.
+                            Current range: {shortsRangeSummary}.
+                          </div>
+                          <div style={styles.presetChipRow}>
+                            {SHORTS_RANGE_PRESETS.map((preset) => {
+                              const active =
+                                shortsRangeStart === preset.start &&
+                                shortsRangeEnd === preset.end;
+
+                              return (
+                                <button
+                                  key={preset.label}
+                                  type="button"
+                                  style={{
+                                    ...styles.presetChip,
+                                    ...(active ? styles.presetChipActive : null),
+                                  }}
+                                  onClick={() =>
+                                    applyShortsRangePreset(preset.start, preset.end)
+                                  }
+                                >
+                                  {preset.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
 
@@ -1978,32 +2213,34 @@ export default function Page() {
                                   background: selected ? "#fff3e6" : "#ffffff",
                                 }}
                               >
-                                <div style={styles.shortClipCheckboxWrap}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selected}
-                                    onChange={() => toggleShortSelection(clip.id)}
-                                  />
-                                </div>
-                                <video
-                                  style={styles.shortsClipPreview}
-                                  controls
-                                  preload="metadata"
-                                  playsInline
-                                  poster={clip.thumbnailUrl || undefined}
-                                >
-                                  <source src={clip.downloadUrl} type="video/mp4" />
-                                </video>
-                                <div style={styles.shortsClipBody}>
-                                  <div style={styles.shortsClipTopRow}>
-                                    <div style={styles.shortsClipTitle}>{clip.title}</div>
-                                    <div style={styles.shortsQualityPill}>
-                                      {clip.qualityLabel}
-                                      {clip.qualityScore !== null
-                                        ? ` · ${clip.qualityScore}`
-                                        : ""}
-                                    </div>
+                                <div style={styles.shortsClipCardHeader}>
+                                  <div style={styles.shortClipCheckboxWrap}>
+                                    <input
+                                      type="checkbox"
+                                      checked={selected}
+                                      onChange={() => toggleShortSelection(clip.id)}
+                                    />
                                   </div>
+                                  <div style={styles.shortsQualityPill}>
+                                    {clip.qualityLabel}
+                                    {clip.qualityScore !== null
+                                      ? ` · ${clip.qualityScore}`
+                                      : ""}
+                                  </div>
+                                </div>
+                                <div style={styles.shortsClipPreviewWrap}>
+                                  <video
+                                    style={styles.shortsClipPreview}
+                                    controls
+                                    preload="metadata"
+                                    playsInline
+                                    poster={clip.thumbnailUrl || undefined}
+                                  >
+                                    <source src={clip.downloadUrl} type="video/mp4" />
+                                  </video>
+                                </div>
+                                <div style={styles.shortsClipBody}>
+                                  <div style={styles.shortsClipTitle}>{clip.title}</div>
                                   <div style={styles.shortsClipMeta}>
                                     #{clip.rank} · {clip.duration} · {clip.angle}
                                   </div>
@@ -2589,6 +2826,57 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: "#587092",
   },
+  segmentedControl: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: 6,
+    borderRadius: 16,
+    background: "#eef4ff",
+    border: "1px solid #d8e3f5",
+    flexWrap: "wrap",
+  },
+  segmentedButton: {
+    border: "none",
+    background: "transparent",
+    color: "#5a6f8e",
+    borderRadius: 12,
+    padding: "10px 14px",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
+  },
+  segmentedButtonActive: {
+    background: "#ffffff",
+    color: "#214a8c",
+    boxShadow: "0 8px 18px rgba(33, 74, 140, 0.12)",
+  },
+  rangeFieldGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 12,
+  },
+  presetChipRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
+  presetChip: {
+    border: "1px solid #d8e3f5",
+    background: "#ffffff",
+    color: "#486280",
+    borderRadius: 999,
+    padding: "8px 12px",
+    fontWeight: 700,
+    fontSize: 12,
+    cursor: "pointer",
+  },
+  presetChipActive: {
+    border: "1px solid #ffcf9f",
+    background: "#fff2e4",
+    color: "#c86d12",
+  },
   helperBanner: {
     marginBottom: 16,
     borderRadius: 14,
@@ -2813,45 +3101,54 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortsClipList: {
     display: "grid",
-    gap: 12,
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 18,
   },
   shortsClipCard: {
-    display: "flex",
-    alignItems: "stretch",
+    display: "grid",
+    alignContent: "start",
     gap: 12,
     border: "1px solid #d8e3f5",
-    borderRadius: 16,
-    padding: "14px 16px",
+    borderRadius: 20,
+    padding: "14px",
     cursor: "pointer",
+    boxShadow: "0 10px 24px rgba(16, 35, 63, 0.06)",
+  },
+  shortsClipCardHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   shortClipCheckboxWrap: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  shortsClipPreviewWrap: {
+    display: "flex",
     justifyContent: "center",
   },
   shortsClipPreview: {
-    width: 120,
-    height: 214,
+    width: "100%",
+    maxWidth: 220,
+    aspectRatio: "9 / 16",
+    height: "auto",
     objectFit: "cover",
-    borderRadius: 12,
+    borderRadius: 18,
     border: "1px solid #dce7f7",
     background: "#f3f7fd",
-    flexShrink: 0,
   },
   shortsClipBody: {
-    flex: 1,
     minWidth: 0,
-  },
-  shortsClipTopRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
+    display: "grid",
+    gap: 6,
   },
   shortsClipTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 800,
     color: "#0d2242",
+    lineHeight: 1.35,
   },
   shortsQualityPill: {
     borderRadius: 999,
@@ -2864,13 +3161,11 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   shortsClipMeta: {
-    marginTop: 4,
     fontSize: 13,
     color: "#627590",
     lineHeight: 1.6,
   },
   shortsClipTextBlock: {
-    marginTop: 10,
     display: "grid",
     gap: 6,
   },
@@ -2892,19 +3187,23 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#54677f",
     lineHeight: 1.6,
     whiteSpace: "pre-wrap",
+    display: "-webkit-box",
+    WebkitLineClamp: 6,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
   },
   shortsClipActions: {
     display: "flex",
-    gap: 10,
+    gap: 8,
     flexWrap: "wrap",
-    marginTop: 12,
+    marginTop: 4,
   },
   miniActionButton: {
     border: "1px solid #d8e3f5",
     background: "#ffffff",
     color: "#214a8c",
     borderRadius: 12,
-    padding: "9px 12px",
+    padding: "8px 11px",
     fontWeight: 700,
     fontSize: 12,
     cursor: "pointer",
