@@ -63,7 +63,7 @@ const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_POLL_INTERVAL_MS = 6000;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
-const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 180;
+const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 300;
 const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 1500;
 const SHORTSGEN_RESULTS_MAX_RETRIES = 6;
 const SHORTS_RANGE_PRESETS = [
@@ -1373,7 +1373,7 @@ export default function Page() {
       if (finalStatus !== "COMPLETED") {
         throw new Error(
           isFullVideoAiClipping
-            ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs around 10+ minutes can pause at mid-progress for several minutes. Please wait a bit longer and try again, or use First 2 min / First 3 min / First 5 min for much faster results."
+            ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs around 10+ minutes can pause at mid-progress for a long time. Please wait a bit longer and try again, or use First 2 min / First 3 min / First 5 min for much faster results."
             : "ShortsGen is still processing this job. Please wait a little longer and try again."
         );
       }
@@ -2373,7 +2373,7 @@ export default function Page() {
                               Current range: {shortsRangeSummary}.
                             </div>
                             <div style={styles.helperText}>
-                              Full video on 10+ minute sources can take much longer, and the
+                              Full video on 10+ minute sources can take 20+ minutes, and the
                               progress bar may pause in the middle while ShortsGen scans the
                               whole video.
                             </div>
