@@ -127,7 +127,8 @@ const CRC32_TABLE = (() => {
 const computeCrc32 = (buffer: Buffer) => {
   let crc = 0xffffffff;
 
-  for (const byte of buffer) {
+  for (let index = 0; index < buffer.length; index += 1) {
+    const byte = buffer[index];
     crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
   }
 
