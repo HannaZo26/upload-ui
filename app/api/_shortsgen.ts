@@ -108,6 +108,31 @@ export const normalizeShortsgenStatus = (data: any) =>
     data?.data?.state
   ).toUpperCase();
 
+export const normalizeShortsgenProgress = (data: any) => {
+  const rawProgress = pickFirstNumber(
+    data?.progress,
+    data?.progress_pct,
+    data?.progress_percent,
+    data?.progressPercentage,
+    data?.percentage,
+    data?.percent,
+    data?.completion,
+    data?.completed_percent,
+    data?.completedPercent,
+    data?.data?.progress,
+    data?.data?.progress_pct,
+    data?.data?.progress_percent,
+    data?.data?.progressPercentage,
+    data?.data?.percentage,
+    data?.data?.percent,
+    data?.data?.completion
+  );
+
+  if (rawProgress === null) return null;
+  if (rawProgress <= 1) return Math.max(0, Math.min(100, Math.round(rawProgress * 100)));
+  return Math.max(0, Math.min(100, Math.round(rawProgress)));
+};
+
 const formatSeconds = (totalSeconds: number | null) => {
   if (totalSeconds === null || !Number.isFinite(totalSeconds)) {
     return "Unknown length";
