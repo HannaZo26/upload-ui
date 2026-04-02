@@ -59,7 +59,7 @@ type ShortsGenerationMode = "aiClipping" | "manualSelected";
 const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_POLL_INTERVAL_MS = 6000;
-const SHORTSGEN_MAX_POLL_ATTEMPTS = 40;
+const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
 const SHORTS_RANGE_PRESETS = [
   { label: "Full video", start: "", end: "" },
   { label: "First 3 min", start: "00:00", end: "03:00" },
@@ -1248,9 +1248,6 @@ export default function Page() {
       setShortsJobId(jobId);
       setShortsJobStatus("SCHEDULED");
       setShortsJobProgress(0);
-      setShortsSuccess(
-        `Shorts job created for ${shortsRangeSummary.toLowerCase()}. Generating clips now...`
-      );
 
       let finalStatus = "";
 
@@ -1279,21 +1276,7 @@ export default function Page() {
           explicitProgressRaw !== null && Number.isFinite(explicitProgressRaw)
             ? Math.max(0, Math.min(100, Math.round(explicitProgressRaw)))
             : null;
-        const estimatedProgress =
-          finalStatus === "COMPLETED"
-            ? 100
-            : finalStatus === "SCHEDULED"
-            ? 5
-            : finalStatus === "IN_PROGRESS"
-            ? Math.min(
-                95,
-                Math.max(
-                  12,
-                  Math.round(((attempt + 1) / SHORTSGEN_MAX_POLL_ATTEMPTS) * 100)
-                )
-              )
-            : null;
-        setShortsJobProgress(explicitProgress ?? estimatedProgress);
+        setShortsJobProgress(explicitProgress);
 
         if (finalStatus === "COMPLETED") {
           setShortsJobProgress(100);
@@ -1309,17 +1292,11 @@ export default function Page() {
           );
         }
 
-        setShortsSuccess(
-          `Generating shorts... ${finalStatus || "IN_PROGRESS"}. This usually takes a few minutes.`
-        );
-
         await sleep(SHORTSGEN_POLL_INTERVAL_MS);
       }
 
       if (finalStatus !== "COMPLETED") {
-        throw new Error(
-          "Shorts generation is still in progress. Please wait a little longer and try again."
-        );
+        return;
       }
 
       const resultsRes = await fetch(
@@ -1649,6 +1626,13 @@ export default function Page() {
 
     if (!currentUser) {
       setError("Please sign in first.");
+      return;
+    }
+
+    if (currentUser.username === "demo") {
+      setError(
+        "The demo account is view-only. Please use a real account to start automation."
+      );
       return;
     }
 
@@ -2142,70 +2126,109 @@ export default function Page() {
                             </button>
                           </div>
                           <div style={styles.helperText}>
-                            AI Clipping finds the best clips inside your chosen range.
-                            Manual Selection is stricter and only uses the exact range
-                            you provide.
+                            {shortsMode === "aiClipping"
+                              ? "AI Clipping finds the best shorts inside your chosen range. You can leave the range blank to scan the full video."
+                              : "Manual Selection only analyzes the exact time window you provide. This is best when you already know where the strong section is."}
                           </div>
                         </div>
 
-                        <div>
-                          <label style={styles.label}>Time range</label>
-                          <div style={styles.timeframeToolbar}>
-                            <div style={styles.timeframeTitle}>Select timeframe</div>
-                            <button
-                              type="button"
-                              style={styles.timeframeReset}
-                              onClick={() => applyShortsRangePreset("", "")}
-                            >
-                              Reset
-                            </button>
-                          </div>
-                          <div style={styles.rangeFieldGrid}>
-                            <div>
-                              <input
-                                style={styles.input}
-                                value={shortsRangeStart}
-                                onChange={(e) => setShortsRangeStart(e.target.value)}
-                                placeholder="Start, e.g. 00:00"
-                              />
+                        {shortsMode === "aiClipping" ? (
+                          <div>
+                            <label style={styles.label}>Time range</label>
+                            <div style={styles.timeframeToolbar}>
+                              <div style={styles.timeframeTitle}>Select timeframe</div>
+                              <button
+                                type="button"
+                                style={styles.timeframeReset}
+                                onClick={() => applyShortsRangePreset("", "")}
+                              >
+                                Reset
+                              </button>
                             </div>
-                            <div>
-                              <input
-                                style={styles.input}
-                                value={shortsRangeEnd}
-                                onChange={(e) => setShortsRangeEnd(e.target.value)}
-                                placeholder="End, e.g. 05:00"
-                              />
+                            <div style={styles.rangeFieldGrid}>
+                              <div>
+                                <input
+                                  style={styles.input}
+                                  value={shortsRangeStart}
+                                  onChange={(e) => setShortsRangeStart(e.target.value)}
+                                  placeholder="Start, e.g. 00:00"
+                                />
+                              </div>
+                              <div>
+                                <input
+                                  style={styles.input}
+                                  value={shortsRangeEnd}
+                                  onChange={(e) => setShortsRangeEnd(e.target.value)}
+                                  placeholder="End, e.g. 05:00"
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <div style={styles.helperText}>
-                            Leave both blank to use the full video in AI Clipping mode.
-                            Current range: {shortsRangeSummary}.
-                          </div>
-                          <div style={styles.presetChipRow}>
-                            {SHORTS_RANGE_PRESETS.map((preset) => {
-                              const active =
-                                shortsRangeStart === preset.start &&
-                                shortsRangeEnd === preset.end;
+                            <div style={styles.helperText}>
+                              Leave both blank to use the full video in AI Clipping mode.
+                              Current range: {shortsRangeSummary}.
+                            </div>
+                            <div style={styles.presetChipRow}>
+                              {SHORTS_RANGE_PRESETS.map((preset) => {
+                                const active =
+                                  shortsRangeStart === preset.start &&
+                                  shortsRangeEnd === preset.end;
 
-                              return (
-                                <button
-                                  key={preset.label}
-                                  type="button"
-                                  style={{
-                                    ...styles.presetChip,
-                                    ...(active ? styles.presetChipActive : null),
-                                  }}
-                                  onClick={() =>
-                                    applyShortsRangePreset(preset.start, preset.end)
-                                  }
-                                >
-                                  {preset.label}
-                                </button>
-                              );
-                            })}
+                                return (
+                                  <button
+                                    key={preset.label}
+                                    type="button"
+                                    style={{
+                                      ...styles.presetChip,
+                                      ...(active ? styles.presetChipActive : null),
+                                    }}
+                                    onClick={() =>
+                                      applyShortsRangePreset(preset.start, preset.end)
+                                    }
+                                  >
+                                    {preset.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div style={styles.manualSelectionCard}>
+                            <div style={styles.manualSelectionHeader}>
+                              <div style={styles.manualSelectionTitle}>
+                                Exact clip range
+                              </div>
+                              <div style={styles.manualSelectionBadge}>Required</div>
+                            </div>
+                            <div style={styles.rangeFieldGrid}>
+                              <div>
+                                <label style={styles.label}>Start time</label>
+                                <input
+                                  style={styles.input}
+                                  value={shortsRangeStart}
+                                  onChange={(e) => setShortsRangeStart(e.target.value)}
+                                  placeholder="00:00"
+                                />
+                              </div>
+                              <div>
+                                <label style={styles.label}>End time</label>
+                                <input
+                                  style={styles.input}
+                                  value={shortsRangeEnd}
+                                  onChange={(e) => setShortsRangeEnd(e.target.value)}
+                                  placeholder="05:00"
+                                />
+                              </div>
+                            </div>
+                            <div style={styles.helperText}>
+                              Manual Selection only uses this exact window. Current range:{" "}
+                              {shortsRangeSummary}.
+                            </div>
+                            <div style={styles.manualSelectionTip}>
+                              Tip: use `MM:SS` like `02:30` to `06:45` for a focused
+                              section from a long video.
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div style={styles.inlineActions}>
@@ -2244,19 +2267,28 @@ export default function Page() {
                         <div style={styles.helperText}>Job ID: {shortsJobId}</div>
                       ) : null}
 
-                      {shortsJobProgress !== null && shortsJobStatus !== "FAILED" ? (
+                      {(shortsJobStatus === "SCHEDULED" ||
+                        shortsJobStatus === "IN_PROGRESS" ||
+                        shortsJobProgress !== null) &&
+                      shortsJobStatus !== "FAILED" ? (
                         <div style={styles.progressCard}>
                           <div style={styles.progressRow}>
                             <div style={styles.progressLabel}>Generation progress</div>
-                            <div style={styles.progressValue}>{shortsJobProgress}%</div>
+                            <div style={styles.progressValue}>
+                              {shortsJobProgress !== null ? `${shortsJobProgress}%` : "Processing"}
+                            </div>
                           </div>
                           <div style={styles.progressTrack}>
-                            <div
-                              style={{
-                                ...styles.progressFill,
-                                width: `${shortsJobProgress}%`,
-                              }}
-                            />
+                            {shortsJobProgress !== null ? (
+                              <div
+                                style={{
+                                  ...styles.progressFill,
+                                  width: `${shortsJobProgress}%`,
+                                }}
+                              />
+                            ) : (
+                              <div style={styles.progressFillIndeterminate} />
+                            )}
                           </div>
                         </div>
                       ) : null}
@@ -2553,13 +2585,21 @@ export default function Page() {
                       style={{
                         ...styles.primaryButton,
                         width: "100%",
-                        opacity: submitting ? 0.7 : 1,
-                        cursor: submitting ? "not-allowed" : "pointer",
+                        opacity:
+                          submitting || currentUser?.username === "demo" ? 0.7 : 1,
+                        cursor:
+                          submitting || currentUser?.username === "demo"
+                            ? "not-allowed"
+                            : "pointer",
                       }}
                       onClick={submitToN8n}
-                      disabled={submitting}
+                      disabled={submitting || currentUser?.username === "demo"}
                     >
-                      {submitting ? "Starting..." : "Start automation"}
+                      {currentUser?.username === "demo"
+                        ? "Demo account cannot start automation"
+                        : submitting
+                        ? "Starting..."
+                        : "Start automation"}
                     </button>
                   </div>
 
@@ -2933,6 +2973,44 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     padding: 0,
   },
+  manualSelectionCard: {
+    borderRadius: 18,
+    border: "1px solid #d8e3f5",
+    background: "linear-gradient(180deg, #f9fbff 0%, #f4f8ff 100%)",
+    padding: 18,
+  },
+  manualSelectionHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
+  },
+  manualSelectionTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: "#18345f",
+  },
+  manualSelectionBadge: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#fff1df",
+    color: "#b86407",
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  },
+  manualSelectionTip: {
+    marginTop: 12,
+    borderRadius: 14,
+    padding: "12px 14px",
+    background: "#ffffff",
+    border: "1px dashed #cfe0f5",
+    color: "#5b6f8b",
+    fontSize: 13,
+    lineHeight: 1.6,
+    fontWeight: 600,
+  },
   rangeFieldGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
@@ -3227,6 +3305,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 999,
     background: "linear-gradient(90deg, #4b7cff 0%, #2c5df7 100%)",
     transition: "width 240ms ease",
+  },
+  progressFillIndeterminate: {
+    width: "38%",
+    height: "100%",
+    borderRadius: 999,
+    background: "linear-gradient(90deg, #4b7cff 0%, #2c5df7 100%)",
+    boxShadow: "0 0 24px rgba(44, 93, 247, 0.25)",
   },
   shortsClipList: {
     display: "grid",
