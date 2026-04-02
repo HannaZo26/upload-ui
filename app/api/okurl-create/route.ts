@@ -9,6 +9,20 @@ import {
   SHORT_LINK_DOMAIN,
 } from "../_okurl";
 
+const readBooleanFlag = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["1", "true", "yes", "on"].includes(normalized)) return true;
+      if (["0", "false", "no", "off"].includes(normalized)) return false;
+    }
+  }
+
+  return null;
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -23,6 +37,14 @@ export async function POST(request: Request) {
       body?.pathPrefix,
       DEFAULT_PATH_PREFIX
     );
+    const explicitRedirectType = pickFirstString(
+      body?.redirect_type,
+      body?.redirectType
+    );
+    const signUpWallEnabled =
+      readBooleanFlag(body?.sign_up_wall, body?.signUpWall) ??
+      explicitRedirectType === "1";
+    const redirectType = signUpWallEnabled ? "1" : "0";
 
     if (!domainId) {
       return NextResponse.json(
@@ -41,6 +63,7 @@ export async function POST(request: Request) {
     const payload: Record<string, string> = {
       domain_id: domainId,
       url,
+      redirect_type: redirectType,
     };
 
     if (projectId) payload.project_id = projectId;
@@ -121,6 +144,21 @@ export async function POST(request: Request) {
       slug: returnedSlug,
       okurl: shortUrl,
       short_url: shortUrl,
+      redirect_type: pickFirstString(
+        detailData?.redirect_type,
+        detailData?.data?.redirect_type,
+        result.data?.redirect_type,
+        result.data?.data?.redirect_type,
+        redirectType
+      ),
+      sign_up_wall:
+        pickFirstString(
+          detailData?.redirect_type,
+          detailData?.data?.redirect_type,
+          result.data?.redirect_type,
+          result.data?.data?.redirect_type,
+          redirectType
+        ) === "1",
       upstream: result.data,
       detail_upstream: detailData,
     });
