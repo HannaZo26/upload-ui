@@ -44,17 +44,25 @@ type OkurlDomainOption = {
 type ShortsClipOption = {
   id: string;
   title: string;
+  description: string;
   duration: string;
   angle: string;
+  downloadUrl: string;
+  thumbnailUrl: string;
+  qualityLabel: string;
+  qualityScore: number | null;
+  rank: number;
 };
 
 const SHORT_LINK_DOMAIN = "gjw.us";
-const TXT_BOX_COUNT = 4;
+const TXT_BOX_COUNT = 5;
+const SHORTSGEN_POLL_INTERVAL_MS = 6000;
+const SHORTSGEN_MAX_POLL_ATTEMPTS = 40;
 const WORKFLOW_STEPS = [
   "Choose page and folder destination",
   "Generate the OKURL short link",
-  "Write and download the TXT files",
   "Generate and review shorts",
+  "Write and prepare the TXT files",
   "Upload the mp4 and matching txt",
   "Review the summary and start automation",
 ];
@@ -66,37 +74,6 @@ const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   term: "",
   content: "",
   sourcePlatform: "",
-};
-
-const buildShortsOptions = (pageName: string): ShortsClipOption[] => {
-  const label = pageName || "content";
-
-  return [
-    {
-      id: "hook-cut",
-      title: `${label} Hook Cut`,
-      duration: "00:24",
-      angle: "Fast hook",
-    },
-    {
-      id: "story-cut",
-      title: `${label} Story Highlight`,
-      duration: "00:31",
-      angle: "Story beat",
-    },
-    {
-      id: "insight-cut",
-      title: `${label} Insight Moment`,
-      duration: "00:27",
-      angle: "Key takeaway",
-    },
-    {
-      id: "ending-cut",
-      title: `${label} Strong Ending`,
-      duration: "00:19",
-      angle: "Closing punch",
-    },
-  ];
 };
 
 const pickFirstString = (...values: unknown[]) => {
@@ -389,6 +366,34 @@ const normalizeShortUrlToDomain = (value: string, domain: string) => {
   }
 };
 
+const sleep = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const readResponseData = async (response: Response) => {
+  const text = await response.text();
+
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return { raw: text };
+  }
+};
+
+const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
+  return `video${index + 1}.${extension}`;
+};
+
+const replaceGeneratedFiles = (
+  existingFiles: File[],
+  incomingFiles: File[],
+  matcher: RegExp
+) => {
+  const preserved = existingFiles.filter((file) => !matcher.test(file.name));
+  return [...preserved, ...incomingFiles];
+};
+
 const demoUsers: Record<string, DemoUser> = {
   haiyennt: {
     password: "Hge&geTEg@ge123",
@@ -536,7 +541,7 @@ const demoUsers: Record<string, DemoUser> = {
     ],
   },
 
-joanne: {
+  joanne: {
     password: "TygMcK@kf$13",
     folders: [
       "tastefulworldzh",
@@ -591,7 +596,7 @@ joanne: {
       "heresthequestion",
     ],
   },
-  
+
   ying: {
     password: "HGtYEG$eff@323",
     folders: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
@@ -658,8 +663,12 @@ export default function Page() {
   const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
   const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
   const [generatingShorts, setGeneratingShorts] = useState(false);
+  const [addingShortsToUploads, setAddingShortsToUploads] = useState(false);
+  const [addingTxtsToUploads, setAddingTxtsToUploads] = useState(false);
   const [shortsSuccess, setShortsSuccess] = useState("");
   const [shortsError, setShortsError] = useState("");
+  const [shortsJobId, setShortsJobId] = useState("");
+  const [shortsJobStatus, setShortsJobStatus] = useState("");
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
@@ -916,6 +925,10 @@ export default function Page() {
     setSelectedShortIds([]);
     setShortsSuccess("");
     setShortsError("");
+    setShortsJobId("");
+    setShortsJobStatus("");
+    setAddingShortsToUploads(false);
+    setAddingTxtsToUploads(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -972,6 +985,10 @@ export default function Page() {
     setSelectedShortIds([]);
     setShortsSuccess("");
     setShortsError("");
+    setShortsJobId("");
+    setShortsJobStatus("");
+    setAddingShortsToUploads(false);
+    setAddingTxtsToUploads(false);
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -1043,17 +1060,118 @@ export default function Page() {
 
     try {
       setGeneratingShorts(true);
+      setShortsClips([]);
+      setSelectedShortIds([]);
+      setShortsJobId("");
+      setShortsJobStatus("");
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const createRes = await fetch("/api/shortsgen/jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          source_url: shortsSourceUrl.trim(),
+          options: {
+            mode: "aiClipping",
+          },
+        }),
+      });
 
-      const generatedClips = buildShortsOptions(pageName);
-      setShortsClips(generatedClips);
-      setSelectedShortIds(generatedClips.slice(0, 2).map((clip) => clip.id));
-      setShortsSuccess(
-        "Shorts preview is ready. API download can be connected here next."
+      const createData = await readResponseData(createRes);
+
+      if (!createRes.ok) {
+        throw new Error(
+          createData?.error ||
+            createData?.message ||
+            "Failed to submit the ShortsGen job."
+        );
+      }
+
+      const jobId = pickFirstString(createData?.id, createData?.job_id);
+
+      if (!jobId) {
+        throw new Error("ShortsGen did not return a job ID.");
+      }
+
+      setShortsJobId(jobId);
+      setShortsJobStatus("SCHEDULED");
+      setShortsSuccess("Shorts job created. Generating clips now...");
+
+      let finalStatus = "";
+
+      for (let attempt = 0; attempt < SHORTSGEN_MAX_POLL_ATTEMPTS; attempt += 1) {
+        const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
+          cache: "no-store",
+        });
+        const statusData = await readResponseData(statusRes);
+
+        if (!statusRes.ok) {
+          throw new Error(
+            statusData?.error ||
+              statusData?.message ||
+              "Failed to check ShortsGen job status."
+          );
+        }
+
+        finalStatus = pickFirstString(statusData?.status).toUpperCase();
+        setShortsJobStatus(finalStatus);
+
+        if (finalStatus === "COMPLETED") {
+          break;
+        }
+
+        if (finalStatus === "FAILED") {
+          throw new Error(
+            statusData?.error ||
+              statusData?.message ||
+              statusData?.upstream?.message ||
+              "Shorts generation failed."
+          );
+        }
+
+        setShortsSuccess(
+          `Generating shorts... ${finalStatus || "IN_PROGRESS"}. This usually takes a few minutes.`
+        );
+
+        await sleep(SHORTSGEN_POLL_INTERVAL_MS);
+      }
+
+      if (finalStatus !== "COMPLETED") {
+        throw new Error(
+          "Shorts generation is still in progress. Please wait a little longer and try again."
+        );
+      }
+
+      const resultsRes = await fetch(
+        `/api/shortsgen/jobs/${encodeURIComponent(jobId)}/results`,
+        {
+          cache: "no-store",
+        }
       );
-    } catch {
-      setShortsError("Failed to prepare the shorts preview.");
+      const resultsData = await readResponseData(resultsRes);
+
+      if (!resultsRes.ok) {
+        throw new Error(
+          resultsData?.error ||
+            resultsData?.message ||
+            "Failed to load the generated shorts."
+        );
+      }
+
+      const clips = Array.isArray(resultsData?.clips) ? resultsData.clips : [];
+
+      if (!clips.length) {
+        throw new Error("ShortsGen completed, but no clips were returned.");
+      }
+
+      setShortsClips(clips);
+      setSelectedShortIds(clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id));
+      setShortsSuccess(
+        `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`
+      );
+    } catch (err: any) {
+      setShortsError(err?.message || "Failed to prepare the shorts preview.");
     } finally {
       setGeneratingShorts(false);
     }
@@ -1067,6 +1185,23 @@ export default function Page() {
     );
   };
 
+  const copyClipText = async (value: string, label: string) => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      setShortsError(`No ${label.toLowerCase()} is available to copy.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(trimmed);
+      setShortsError("");
+      setShortsSuccess(`${label} copied. You can paste it into a TXT Description box.`);
+    } catch {
+      setShortsError(`Failed to copy ${label.toLowerCase()}.`);
+    }
+  };
+
   const downloadSelectedShorts = () => {
     setShortsError("");
     setShortsSuccess("");
@@ -1076,9 +1211,118 @@ export default function Page() {
       return;
     }
 
-    setShortsSuccess(
-      `${selectedShortIds.length} short(s) selected. Download flow will connect to the Shorts Generator API next.`
-    );
+    const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
+
+    selectedClips.forEach((clip, index) => {
+      const anchor = document.createElement("a");
+      anchor.href = clip.downloadUrl;
+      anchor.download = buildSequentialFileName(index, "mp4");
+      anchor.target = "_blank";
+      anchor.rel = "noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    });
+
+    setShortsSuccess(`${selectedClips.length} short(s) download started.`);
+  };
+
+  const addSelectedShortsToUploadList = async () => {
+    setShortsError("");
+    setShortsSuccess("");
+
+    if (!selectedShortIds.length) {
+      setShortsError("Please select at least one short clip first.");
+      return;
+    }
+
+    try {
+      setAddingShortsToUploads(true);
+
+      const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
+
+      const fetchedFiles = await Promise.all(
+        selectedClips.map(async (clip, index) => {
+          const res = await fetch("/api/shortsgen/download", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url: clip.downloadUrl,
+            }),
+          });
+
+          if (!res.ok) {
+            const data = await readResponseData(res);
+            throw new Error(
+              data?.error ||
+                data?.message ||
+                `Failed to prepare ${clip.title} for upload.`
+            );
+          }
+
+          const blob = await res.blob();
+          const fileName = buildSequentialFileName(index, "mp4");
+
+          return new File([blob], fileName, {
+            type: blob.type || "video/mp4",
+            lastModified: Date.now(),
+          });
+        })
+      );
+
+      setFiles((prev) =>
+        replaceGeneratedFiles(prev, fetchedFiles, /^video\d+\.mp4$/i)
+      );
+
+      setShortsSuccess(
+        `${fetchedFiles.length} short(s) added to the upload list below.`
+      );
+    } catch (err: any) {
+      setShortsError(err?.message || "Failed to add selected shorts to the upload list.");
+    } finally {
+      setAddingShortsToUploads(false);
+    }
+  };
+
+  const addGeneratedTxtsToUploadList = () => {
+    setError("");
+    setSuccess("");
+
+    const populatedEntries = txtDescriptions
+      .map((value, index) => ({
+        fileName: buildSequentialFileName(index, "txt"),
+        content: value.trim(),
+      }))
+      .filter((item) => item.content);
+
+    if (!populatedEntries.length) {
+      setError("Please enter TXT content first.");
+      return;
+    }
+
+    try {
+      setAddingTxtsToUploads(true);
+
+      const generatedTxtFiles = populatedEntries.map(
+        (entry) =>
+          new File(["\uFEFF" + entry.content], entry.fileName, {
+            type: "text/plain;charset=utf-8",
+            lastModified: Date.now(),
+          })
+      );
+
+      setFiles((prev) =>
+        replaceGeneratedFiles(prev, generatedTxtFiles, /^video\d+\.txt$/i)
+      );
+
+      setSuccess(
+        `${generatedTxtFiles.length} generated TXT file(s) added to the upload list below.`
+      );
+    } finally {
+      setAddingTxtsToUploads(false);
+    }
   };
 
   const updateTxtDescription = (index: number, value: string) => {
@@ -1653,47 +1897,15 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 3</div>
-                      <div style={styles.panelTitle}>TXT generator</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.panelDesc}>
-                    Write the TXT content, then download it before uploading.
-                  </div>
-
-                  <div style={styles.txtGrid}>
-                    {txtDescriptions.map((value, index) => (
-                      <div key={`txt-${index}`}>
-                        <label style={styles.label}>{`TXT Description ${index + 1}`}</label>
-                        <textarea
-                          rows={2}
-                          style={styles.textareaCompact}
-                          value={value}
-                          onChange={(e) => updateTxtDescription(index, e.target.value)}
-                          placeholder={`Write TXT content for video${index + 1}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={styles.inlineActions}>
-                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
-                      Download All TXT
-                    </button>
-                  </div>
-                </section>
-
-                <section style={styles.panel}>
-                  <div style={styles.sectionHeader}>
-                    <div>
-                      <div style={styles.kicker}>Step 4</div>
                       <div style={styles.panelTitle}>Shorts generator</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Paste a long-video URL to prepare short clips here. This section is ready
-                    for the future Shorts Generator API connection.
+                    Paste a Gan Jing World long-video URL to generate short clips, review
+                    the strongest options, and copy helpful titles or descriptions into
+                    your TXT writing below before adding the best shorts into the upload
+                    files list.
                   </div>
 
                   <div style={styles.shortsPanel}>
@@ -1707,7 +1919,7 @@ export default function Page() {
                           placeholder="Paste the long video URL here"
                         />
                         <div style={styles.helperText}>
-                          Future API:{" "}
+                          API:{" "}
                           <a
                             href="https://shortsgen.ganjingworld.com/"
                             target="_blank"
@@ -1738,10 +1950,19 @@ export default function Page() {
                     <div style={styles.shortsPreviewCard}>
                       <div style={styles.shortsPreviewHeader}>
                         <div style={styles.actionTitle}>Preview clips</div>
-                        <div style={styles.selectionPill}>
-                          {selectedShortIds.length} selected
+                        <div style={styles.shortsPreviewPills}>
+                          {shortsJobStatus ? (
+                            <div style={styles.statusPill}>{shortsJobStatus}</div>
+                          ) : null}
+                          <div style={styles.selectionPill}>
+                            {selectedShortIds.length} selected
+                          </div>
                         </div>
                       </div>
+
+                      {shortsJobId ? (
+                        <div style={styles.helperText}>Job ID: {shortsJobId}</div>
+                      ) : null}
 
                       {shortsClips.length ? (
                         <div style={styles.shortsClipList}>
@@ -1764,10 +1985,62 @@ export default function Page() {
                                     onChange={() => toggleShortSelection(clip.id)}
                                   />
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={styles.shortsClipTitle}>{clip.title}</div>
+                                <video
+                                  style={styles.shortsClipPreview}
+                                  controls
+                                  preload="metadata"
+                                  playsInline
+                                  poster={clip.thumbnailUrl || undefined}
+                                >
+                                  <source src={clip.downloadUrl} type="video/mp4" />
+                                </video>
+                                <div style={styles.shortsClipBody}>
+                                  <div style={styles.shortsClipTopRow}>
+                                    <div style={styles.shortsClipTitle}>{clip.title}</div>
+                                    <div style={styles.shortsQualityPill}>
+                                      {clip.qualityLabel}
+                                      {clip.qualityScore !== null
+                                        ? ` · ${clip.qualityScore}`
+                                        : ""}
+                                    </div>
+                                  </div>
                                   <div style={styles.shortsClipMeta}>
-                                    {clip.duration} · {clip.angle}
+                                    #{clip.rank} · {clip.duration} · {clip.angle}
+                                  </div>
+                                  <div style={styles.shortsClipTextBlock}>
+                                    <div style={styles.shortsClipTextLabel}>Title</div>
+                                    <div style={styles.shortsClipSnippet}>{clip.title}</div>
+                                    <div style={styles.shortsClipTextLabel}>Description</div>
+                                    <div style={styles.shortsClipDescription}>
+                                      {clip.description || "No description returned by ShortsGen."}
+                                    </div>
+                                  </div>
+                                  <div style={styles.shortsClipActions}>
+                                    <button
+                                      type="button"
+                                      style={styles.miniActionButton}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        void copyClipText(clip.title, "Title");
+                                      }}
+                                    >
+                                      Copy title
+                                    </button>
+                                    <button
+                                      type="button"
+                                      style={styles.miniActionButton}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        void copyClipText(
+                                          clip.description || clip.angle,
+                                          "Description"
+                                        );
+                                      }}
+                                    >
+                                      Copy description
+                                    </button>
                                   </div>
                                 </div>
                               </label>
@@ -1776,8 +2049,9 @@ export default function Page() {
                         </div>
                       ) : (
                         <div style={styles.shortsEmptyState}>
-                          Generate shorts to preview clip options and choose the best ones to
-                          download.
+                          {generatingShorts
+                            ? "ShortsGen is analyzing the long video and preparing clips..."
+                            : "Generate shorts to preview clip options, compare quality, and choose the best ones to download."}
                         </div>
                       )}
 
@@ -1789,6 +2063,20 @@ export default function Page() {
                         >
                           Download selected shorts
                         </button>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.primaryButton,
+                            opacity: addingShortsToUploads ? 0.7 : 1,
+                            cursor: addingShortsToUploads ? "not-allowed" : "pointer",
+                          }}
+                          onClick={addSelectedShortsToUploadList}
+                          disabled={addingShortsToUploads}
+                        >
+                          {addingShortsToUploads
+                            ? "Adding to upload list..."
+                            : "Add Shorts to Upload files"}
+                        </button>
                       </div>
 
                       {shortsSuccess ? (
@@ -1797,6 +2085,66 @@ export default function Page() {
 
                       {shortsError ? <div style={styles.errorBox}>{shortsError}</div> : null}
                     </div>
+                  </div>
+                </section>
+
+                <section style={styles.panel}>
+                  <div style={styles.sectionHeader}>
+                    <div>
+                      <div style={styles.kicker}>Step 4</div>
+                      <div style={styles.panelTitle}>TXT generator</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.panelDesc}>
+                    After choosing your shorts, write matching TXT content for
+                    `video1` to `video5`. Use the ShortsGen titles and descriptions as
+                    reference, then add the generated TXT files directly into the upload
+                    files list below.
+                  </div>
+
+                  {selectedShortIds.length ? (
+                    <div style={styles.helperBanner}>
+                      {selectedShortIds.length} short(s) selected in Step 3. Fill TXT
+                      Description 1 to {selectedShortIds.length} to match `video1` to
+                      `video{selectedShortIds.length}` in the same order, and leave the
+                      remaining boxes empty if you do not need them.
+                    </div>
+                  ) : null}
+
+                  <div style={styles.txtGrid}>
+                    {txtDescriptions.map((value, index) => (
+                      <div key={`txt-${index}`}>
+                        <label style={styles.label}>{`TXT Description ${index + 1}`}</label>
+                        <textarea
+                          rows={3}
+                          style={styles.textareaCompact}
+                          value={value}
+                          onChange={(e) => updateTxtDescription(index, e.target.value)}
+                          placeholder={`Write TXT content for video${index + 1}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={styles.inlineActions}>
+                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
+                      Download All TXT
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.primaryButton,
+                        opacity: addingTxtsToUploads ? 0.7 : 1,
+                        cursor: addingTxtsToUploads ? "not-allowed" : "pointer",
+                      }}
+                      onClick={addGeneratedTxtsToUploadList}
+                      disabled={addingTxtsToUploads}
+                    >
+                      {addingTxtsToUploads
+                        ? "Adding TXT..."
+                        : "Add TXT to Upload files"}
+                    </button>
                   </div>
                 </section>
 
@@ -2190,8 +2538,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   txtGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-    gap: 16,
+    gridTemplateColumns: "repeat(5, minmax(180px, 1fr))",
+    gap: 14,
+    alignItems: "start",
+    overflowX: "auto",
   },
   okurlStepGrid: {
     display: "grid",
@@ -2238,6 +2588,17 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 8,
     fontSize: 12,
     color: "#587092",
+  },
+  helperBanner: {
+    marginBottom: 16,
+    borderRadius: 14,
+    padding: "12px 14px",
+    background: "#eef6ff",
+    border: "1px solid #cfe0f5",
+    color: "#29527a",
+    fontSize: 13,
+    lineHeight: 1.6,
+    fontWeight: 600,
   },
   inlineLink: {
     color: "#d97706",
@@ -2318,7 +2679,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   textareaCompact: {
     width: "100%",
-    minHeight: 72,
+    minHeight: 96,
     borderRadius: 14,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
@@ -2426,6 +2787,21 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
     marginBottom: 14,
   },
+  shortsPreviewPills: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  statusPill: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#fff1df",
+    color: "#b86407",
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  },
   selectionPill: {
     borderRadius: 999,
     padding: "6px 10px",
@@ -2441,7 +2817,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortsClipCard: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: 12,
     border: "1px solid #d8e3f5",
     borderRadius: 16,
@@ -2453,15 +2829,85 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
   },
+  shortsClipPreview: {
+    width: 120,
+    height: 214,
+    objectFit: "cover",
+    borderRadius: 12,
+    border: "1px solid #dce7f7",
+    background: "#f3f7fd",
+    flexShrink: 0,
+  },
+  shortsClipBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  shortsClipTopRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
   shortsClipTitle: {
     fontSize: 15,
     fontWeight: 800,
     color: "#0d2242",
   },
+  shortsQualityPill: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#fff1df",
+    color: "#b86407",
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  },
   shortsClipMeta: {
     marginTop: 4,
     fontSize: 13,
     color: "#627590",
+    lineHeight: 1.6,
+  },
+  shortsClipTextBlock: {
+    marginTop: 10,
+    display: "grid",
+    gap: 6,
+  },
+  shortsClipTextLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: "#6a7f9b",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  shortsClipSnippet: {
+    fontSize: 14,
+    color: "#112645",
+    fontWeight: 700,
+    lineHeight: 1.5,
+  },
+  shortsClipDescription: {
+    fontSize: 13,
+    color: "#54677f",
+    lineHeight: 1.6,
+    whiteSpace: "pre-wrap",
+  },
+  shortsClipActions: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 12,
+  },
+  miniActionButton: {
+    border: "1px solid #d8e3f5",
+    background: "#ffffff",
+    color: "#214a8c",
+    borderRadius: 12,
+    padding: "9px 12px",
+    fontWeight: 700,
+    fontSize: 12,
+    cursor: "pointer",
   },
   shortsEmptyState: {
     borderRadius: 16,
