@@ -125,12 +125,45 @@ export const normalizeShortsgenProgress = (data: any) => {
     data?.data?.progressPercentage,
     data?.data?.percentage,
     data?.data?.percent,
-    data?.data?.completion
+    data?.data?.completion,
+    data?.progress?.processPercentage,
+    data?.progress?.progress,
+    data?.progress?.percentage
   );
 
-  if (rawProgress === null) return null;
-  if (rawProgress <= 1) return Math.max(0, Math.min(100, Math.round(rawProgress * 100)));
-  return Math.max(0, Math.min(100, Math.round(rawProgress)));
+  if (rawProgress !== null) {
+    if (rawProgress <= 1) {
+      return Math.max(0, Math.min(100, Math.round(rawProgress * 100)));
+    }
+
+    return Math.max(0, Math.min(100, Math.round(rawProgress)));
+  }
+
+  const taskProgress = Array.isArray(data?.progress?.tasks)
+    ? data.progress.tasks
+        .map((task: any) =>
+          pickFirstNumber(
+            task?.processPercentage,
+            task?.progress,
+            task?.progress_pct,
+            task?.progress_percent,
+            task?.percentage,
+            task?.percent,
+            task?.completion
+          )
+        )
+        .filter((value: number | null): value is number => value !== null)
+    : [];
+
+  if (!taskProgress.length) return null;
+
+  const latestProgress = taskProgress[taskProgress.length - 1];
+
+  if (latestProgress <= 1) {
+    return Math.max(0, Math.min(100, Math.round(latestProgress * 100)));
+  }
+
+  return Math.max(0, Math.min(100, Math.round(latestProgress)));
 };
 
 const formatSeconds = (totalSeconds: number | null) => {
@@ -152,6 +185,57 @@ const formatSeconds = (totalSeconds: number | null) => {
   return [minutes, remainder]
     .map((part) => String(part).padStart(2, "0"))
     .join(":");
+};
+
+const parseTimestampPart = (value: unknown) => {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+
+  if (!trimmed) return null;
+
+  const match = trimmed.match(
+    /^(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?$/
+  );
+
+  if (!match) return null;
+
+  const [, hoursRaw, minutesRaw, secondsRaw] = match;
+  const hours = Number(hoursRaw || 0);
+  const minutes = Number(minutesRaw || 0);
+  const seconds = Number(secondsRaw || 0);
+
+  if (![hours, minutes, seconds].every(Number.isFinite)) {
+    return null;
+  }
+
+  return {
+    label: trimmed.replace(/^00:(\d{2}:\d{2}(?:[.,]\d{1,3})?)$/, "$1"),
+    totalSeconds: hours * 3600 + minutes * 60 + seconds,
+  };
+};
+
+const getTimestampRange = (item: any) => {
+  const timestamps = Array.isArray(item?.timestamp)
+    ? item.timestamp
+    : Array.isArray(item?.timestamps)
+    ? item.timestamps
+    : null;
+
+  if (!timestamps || timestamps.length < 2) return null;
+
+  const start = parseTimestampPart(timestamps[0]);
+  const end = parseTimestampPart(timestamps[1]);
+
+  if (!start || !end || end.totalSeconds < start.totalSeconds) {
+    return null;
+  }
+
+  return {
+    start,
+    end,
+    label: `[${start.label} - ${end.label}]`,
+  };
 };
 
 const deriveDuration = (item: any) => {
@@ -181,6 +265,12 @@ const deriveDuration = (item: any) => {
     return formatSeconds(endSec - startSec);
   }
 
+  const timestampRange = getTimestampRange(item);
+
+  if (timestampRange) {
+    return formatSeconds(timestampRange.end.totalSeconds - timestampRange.start.totalSeconds);
+  }
+
   return "Auto clip";
 };
 
@@ -192,7 +282,9 @@ const deriveAngle = (item: any) =>
     item?.highlight,
     item?.theme,
     item?.clip_type
-  ) || "AI-selected highlight";
+  ) ||
+  getTimestampRange(item)?.label ||
+  "AI-selected highlight";
 
 const deriveDescription = (item: any) =>
   pickFirstString(
@@ -203,6 +295,7 @@ const deriveDescription = (item: any) =>
     item?.clip_description,
     item?.clipDescription,
     item?.transcript,
+    item?.quote,
     item?.copy,
     item?.text
   );
@@ -232,6 +325,10 @@ const deriveQualityLabel = (score: number) => {
 };
 
 const coerceResultsArray = (data: any) => {
+  if (Array.isArray(data?.result?.shorts)) return data.result.shorts;
+  if (Array.isArray(data?.data?.result?.shorts)) return data.data.result.shorts;
+  if (Array.isArray(data?.result?.results)) return data.result.results;
+  if (Array.isArray(data?.data?.result?.results)) return data.data.result.results;
   if (Array.isArray(data?.results)) return data.results;
   if (Array.isArray(data?.data?.results)) return data.data.results;
   if (Array.isArray(data?.clips)) return data.clips;
