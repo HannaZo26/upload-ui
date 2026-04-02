@@ -18,15 +18,9 @@ export async function GET(
       return NextResponse.json({ error: "Missing ShortsGen job id." }, { status: 400 });
     }
 
-    const result = await shortsgenRequest(
-      `/api/v1/job/${encodeURIComponent(jobId)}/results`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const result = await shortsgenRequest(`/api/v1/job/${encodeURIComponent(jobId)}`, {
+      method: "GET",
+    });
 
     if (!result.ok) {
       return NextResponse.json(
@@ -44,13 +38,38 @@ export async function GET(
       );
     }
 
-    const clips = normalizeShortsgenResults(result.data);
+    let clips = normalizeShortsgenResults(result.data);
+    let upstream = result.data;
+    let source = "job_status";
+
+    if (!clips.length) {
+      const fallbackResult = await shortsgenRequest(
+        `/api/v1/job/${encodeURIComponent(jobId)}/results`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (fallbackResult.ok) {
+        const fallbackClips = normalizeShortsgenResults(fallbackResult.data);
+
+        if (fallbackClips.length) {
+          clips = fallbackClips;
+          upstream = fallbackResult.data;
+          source = "job_results";
+        }
+      }
+    }
 
     return NextResponse.json({
       id: jobId,
       clips,
       total: clips.length,
-      upstream: result.data,
+      source,
+      upstream,
     });
   } catch (error) {
     return errorResponse(error);
