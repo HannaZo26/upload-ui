@@ -63,6 +63,7 @@ const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_POLL_INTERVAL_MS = 6000;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
+const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 180;
 const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 1500;
 const SHORTSGEN_RESULTS_MAX_RETRIES = 6;
 const SHORTS_RANGE_PRESETS = [
@@ -1216,6 +1217,11 @@ export default function Page() {
     const endSec = parseTimecodeToSeconds(shortsRangeEnd);
     const hasRangeInput =
       Boolean(shortsRangeStart.trim()) || Boolean(shortsRangeEnd.trim());
+    const isFullVideoAiClipping =
+      shortsMode === "aiClipping" && !hasRangeInput;
+    const maxPollAttempts = isFullVideoAiClipping
+      ? SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS
+      : SHORTSGEN_MAX_POLL_ATTEMPTS;
 
     if (hasRangeInput && (startSec === null || endSec === null)) {
       setShortsError("Please enter a valid start and end time like 00:00 or 05:30.");
@@ -1306,7 +1312,7 @@ export default function Page() {
 
       let finalStatus = "";
 
-      for (let attempt = 0; attempt < SHORTSGEN_MAX_POLL_ATTEMPTS; attempt += 1) {
+      for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
         const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
           cache: "no-store",
         });
@@ -1351,7 +1357,11 @@ export default function Page() {
       }
 
       if (finalStatus !== "COMPLETED") {
-        return;
+        throw new Error(
+          isFullVideoAiClipping
+            ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs around 10+ minutes can pause at mid-progress for several minutes. Please wait a bit longer and try again, or use First 2 min / First 3 min / First 5 min for much faster results."
+            : "ShortsGen is still processing this job. Please wait a little longer and try again."
+        );
       }
 
       let clips: ShortsClipOption[] = [];
@@ -2353,6 +2363,11 @@ export default function Page() {
                             <div style={styles.helperText}>
                               Leave both blank to use the full video in AI Clipping mode.
                               Current range: {shortsRangeSummary}.
+                            </div>
+                            <div style={styles.helperText}>
+                              Full video on 10+ minute sources can take much longer, and the
+                              progress bar may pause in the middle while ShortsGen scans the
+                              whole video.
                             </div>
                             <div style={styles.presetChipRow}>
                               {SHORTS_RANGE_PRESETS.map((preset) => {
