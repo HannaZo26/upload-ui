@@ -2,10 +2,35 @@ import { NextResponse } from "next/server";
 
 import {
   errorResponse,
+  NormalizedShortsClip,
   normalizeShortsgenResults,
   pickFirstString,
   shortsgenRequest,
 } from "../../../../_shortsgen";
+
+const mergeClipLists = (...lists: NormalizedShortsClip[][]) => {
+  const merged: NormalizedShortsClip[] = [];
+  const seen = new Set<string>();
+
+  lists.flat().forEach((clip) => {
+    const key = `${clip.downloadUrl}::${clip.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(clip);
+  });
+
+  return merged
+    .sort((a, b) => {
+      if ((b.qualityScore || 0) !== (a.qualityScore || 0)) {
+        return (b.qualityScore || 0) - (a.qualityScore || 0);
+      }
+      return a.rank - b.rank;
+    })
+    .map((clip, index) => ({
+      ...clip,
+      rank: index + 1,
+    }));
+};
 
 export async function GET(
   _request: Request,
@@ -42,25 +67,33 @@ export async function GET(
     let upstream = result.data;
     let source = "job_status";
 
-    if (!clips.length) {
-      const fallbackResult = await shortsgenRequest(
-        `/api/v1/job/${encodeURIComponent(jobId)}/results`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    const fallbackResult = await shortsgenRequest(
+      `/api/v1/job/${encodeURIComponent(jobId)}/results`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-      if (fallbackResult.ok) {
-        const fallbackClips = normalizeShortsgenResults(fallbackResult.data);
+    if (fallbackResult.ok) {
+      const fallbackClips = normalizeShortsgenResults(fallbackResult.data);
+      const mergedClips = mergeClipLists(fallbackClips, clips);
 
-        if (fallbackClips.length) {
-          clips = fallbackClips;
-          upstream = fallbackResult.data;
-          source = "job_results";
-        }
+      if (mergedClips.length) {
+        clips = mergedClips;
+        upstream = {
+          job_status: result.data,
+          job_results: fallbackResult.data,
+        };
+        source =
+          mergedClips.length > fallbackClips.length &&
+          mergedClips.length > normalizeShortsgenResults(result.data).length
+            ? "merged"
+            : fallbackClips.length >= normalizeShortsgenResults(result.data).length
+            ? "job_results"
+            : "job_status";
       }
     }
 
