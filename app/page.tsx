@@ -768,6 +768,7 @@ export default function Page() {
   const [creatingShortUrl, setCreatingShortUrl] = useState(false);
   const [shortUrlError, setShortUrlError] = useState("");
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
+  const [shortUrlCopied, setShortUrlCopied] = useState(false);
   const [shortsSourceUrl, setShortsSourceUrl] = useState("");
   const [shortsMode, setShortsMode] =
     useState<ShortsGenerationMode>("aiClipping");
@@ -779,8 +780,11 @@ export default function Page() {
   const [downloadingShorts, setDownloadingShorts] = useState(false);
   const [addingShortsToUploads, setAddingShortsToUploads] = useState(false);
   const [addingTxtsToUploads, setAddingTxtsToUploads] = useState(false);
+  const [shortsAddedToUploads, setShortsAddedToUploads] = useState(false);
+  const [txtsAddedToUploads, setTxtsAddedToUploads] = useState(false);
   const [shortsSuccess, setShortsSuccess] = useState("");
   const [shortsError, setShortsError] = useState("");
+  const [copiedClipActionKey, setCopiedClipActionKey] = useState("");
   const [shortsJobId, setShortsJobId] = useState("");
   const [shortsJobStatus, setShortsJobStatus] = useState("");
   const [shortsJobProgress, setShortsJobProgress] = useState<number | null>(null);
@@ -801,7 +805,9 @@ export default function Page() {
 
   const availablePages = useMemo(() => {
     if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.pages ?? [];
+    return [...(demoUsers[currentUser.username]?.pages ?? [])].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    );
   }, [currentUser]);
 
   const availableXAccounts = useMemo(() => {
@@ -1066,6 +1072,7 @@ export default function Page() {
     setSignUpWallEnabled(false);
     setShortUrlError("");
     setShortUrlSuccess("");
+    setShortUrlCopied(false);
     setShortsSourceUrl("");
     setShortsMode("aiClipping");
     setShortsRangeStart("");
@@ -1074,11 +1081,14 @@ export default function Page() {
     setSelectedShortIds([]);
     setShortsSuccess("");
     setShortsError("");
+    setCopiedClipActionKey("");
     setShortsJobId("");
     setShortsJobStatus("");
     setShortsJobProgress(null);
     setAddingShortsToUploads(false);
     setAddingTxtsToUploads(false);
+    setShortsAddedToUploads(false);
+    setTxtsAddedToUploads(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -1099,7 +1109,9 @@ export default function Page() {
       return;
     }
 
-    const firstPage = user.pages[0] ?? "";
+    const firstPage = [...user.pages].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    )[0] ?? "";
     const firstFolder =
       user.folders.find(
         (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
@@ -1113,6 +1125,10 @@ export default function Page() {
     setYoutubeAccountName("");
     setTiktokAccountName("");
     setSignUpWallEnabled(false);
+    setShortUrlCopied(false);
+    setCopiedClipActionKey("");
+    setShortsAddedToUploads(false);
+    setTxtsAddedToUploads(false);
     setLoginPassword("");
   };
 
@@ -1131,6 +1147,7 @@ export default function Page() {
     setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
     setShortUrlError("");
     setShortUrlSuccess("");
+    setShortUrlCopied(false);
     setSelectedProjectId("");
     setSelectedUtmTemplateKey("");
     setUtmFields(EMPTY_UTM_FIELDS);
@@ -1142,11 +1159,14 @@ export default function Page() {
     setSelectedShortIds([]);
     setShortsSuccess("");
     setShortsError("");
+    setCopiedClipActionKey("");
     setShortsJobId("");
     setShortsJobStatus("");
     setShortsJobProgress(null);
     setAddingShortsToUploads(false);
     setAddingTxtsToUploads(false);
+    setShortsAddedToUploads(false);
+    setTxtsAddedToUploads(false);
     setXAccountName("");
     setYoutubeAccountName("");
     setTiktokAccountName("");
@@ -1443,7 +1463,11 @@ export default function Page() {
     );
   };
 
-  const copyClipText = async (value: string, label: string) => {
+  const copyClipText = async (
+    clipId: string,
+    value: string,
+    label: "title" | "description"
+  ) => {
     const trimmed = value.trim();
 
     if (!trimmed) {
@@ -1454,7 +1478,13 @@ export default function Page() {
     try {
       await navigator.clipboard.writeText(trimmed);
       setShortsError("");
-      setShortsSuccess(`${label} copied. You can paste it into a TXT Description box.`);
+      const actionKey = `${clipId}:${label}`;
+      setCopiedClipActionKey(actionKey);
+      window.setTimeout(() => {
+        setCopiedClipActionKey((current) =>
+          current === actionKey ? "" : current
+        );
+      }, 1600);
     } catch {
       setShortsError(`Failed to copy ${label.toLowerCase()}.`);
     }
@@ -1525,6 +1555,7 @@ export default function Page() {
   const addSelectedShortsToUploadList = async () => {
     setShortsError("");
     setShortsSuccess("");
+    setShortsAddedToUploads(false);
 
     if (!selectedShortIds.length) {
       setShortsError("Please select at least one short clip first.");
@@ -1571,9 +1602,10 @@ export default function Page() {
         replaceGeneratedFiles(prev, fetchedFiles, /^video\d+\.mp4$/i)
       );
 
-      setShortsSuccess(
-        `${fetchedFiles.length} short(s) added to the upload list below.`
-      );
+      setShortsAddedToUploads(true);
+      window.setTimeout(() => {
+        setShortsAddedToUploads(false);
+      }, 1600);
     } catch (err: any) {
       setShortsError(err?.message || "Failed to add selected shorts to the upload list.");
     } finally {
@@ -1584,6 +1616,7 @@ export default function Page() {
   const addGeneratedTxtsToUploadList = () => {
     setError("");
     setSuccess("");
+    setTxtsAddedToUploads(false);
 
     const populatedEntries = txtDescriptions
       .map((value, index) => ({
@@ -1612,9 +1645,10 @@ export default function Page() {
         replaceGeneratedFiles(prev, generatedTxtFiles, /^video\d+\.txt$/i)
       );
 
-      setSuccess(
-        `${generatedTxtFiles.length} generated TXT file(s) added to the upload list below.`
-      );
+      setTxtsAddedToUploads(true);
+      window.setTimeout(() => {
+        setTxtsAddedToUploads(false);
+      }, 1600);
     } finally {
       setAddingTxtsToUploads(false);
     }
@@ -1735,6 +1769,7 @@ export default function Page() {
       }
 
       setShortUrl(normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN));
+      setShortUrlCopied(false);
       setShortUrlSuccess("Short URL generated successfully with gjw.us.");
     } catch (err: any) {
       setShortUrlError(err?.message || "Failed to generate short URL.");
@@ -1751,8 +1786,11 @@ export default function Page() {
 
     try {
       await navigator.clipboard.writeText(shortUrl);
-      setShortUrlSuccess("Short URL copied.");
       setShortUrlError("");
+      setShortUrlCopied(true);
+      window.setTimeout(() => {
+        setShortUrlCopied(false);
+      }, 1600);
     } catch {
       setShortUrlError("Copy failed.");
     }
@@ -2134,6 +2172,9 @@ export default function Page() {
                           >
                             Copy
                           </button>
+                          {shortUrlCopied ? (
+                            <span style={styles.copiedText}>Copied</span>
+                          ) : null}
                         </div>
                       </div>
 
@@ -2263,10 +2304,6 @@ export default function Page() {
                             />
                             <span style={styles.toggleLabel}>Sign-up Wall</span>
                           </label>
-                          <div style={styles.helperText}>
-                            Appends `&softsignup=on` to the final target URL before creating
-                            the short link.
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -2544,7 +2581,6 @@ export default function Page() {
                                   </video>
                                 </div>
                                 <div style={styles.shortsClipBody}>
-                                  <div style={styles.shortsClipTitle}>{clip.title}</div>
                                   <div style={styles.shortsClipMeta}>
                                     #{clip.rank} · {clip.duration} · {clip.angle}
                                   </div>
@@ -2563,11 +2599,14 @@ export default function Page() {
                                       onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        void copyClipText(clip.title, "Title");
+                                        void copyClipText(clip.id, clip.title, "title");
                                       }}
                                     >
                                       Copy title
                                     </button>
+                                    {copiedClipActionKey === `${clip.id}:title` ? (
+                                      <span style={styles.copiedText}>Copied</span>
+                                    ) : null}
                                     <button
                                       type="button"
                                       style={styles.miniActionButton}
@@ -2575,13 +2614,17 @@ export default function Page() {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         void copyClipText(
+                                          clip.id,
                                           clip.description || clip.angle,
-                                          "Description"
+                                          "description"
                                         );
                                       }}
                                     >
                                       Copy description
                                     </button>
+                                    {copiedClipActionKey === `${clip.id}:description` ? (
+                                      <span style={styles.copiedText}>Copied</span>
+                                    ) : null}
                                   </div>
                                 </div>
                               </label>
@@ -2623,6 +2666,9 @@ export default function Page() {
                             ? "Adding to upload list..."
                             : "Add Shorts to Upload files"}
                         </button>
+                        {shortsAddedToUploads ? (
+                          <span style={styles.copiedText}>Added</span>
+                        ) : null}
                       </div>
 
                       {shortsSuccess ? (
@@ -2691,6 +2737,9 @@ export default function Page() {
                         ? "Adding TXT..."
                         : "Add TXT to Upload files"}
                     </button>
+                    {txtsAddedToUploads ? (
+                      <span style={styles.copiedText}>Added</span>
+                    ) : null}
                   </div>
                 </section>
 
@@ -3150,6 +3199,12 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 8,
     fontSize: 12,
     color: "#587092",
+  },
+  copiedText: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#177245",
+    whiteSpace: "nowrap",
   },
   segmentedControl: {
     display: "inline-flex",
