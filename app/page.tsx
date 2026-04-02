@@ -6,6 +6,9 @@ type DemoUser = {
   password: string;
   folders: string[];
   pages: string[];
+  xAccounts?: string[];
+  youtubeAccounts?: string[];
+  tiktokAccounts?: string[];
 };
 
 type CurrentUser = {
@@ -71,8 +74,8 @@ const SHORTS_RANGE_PRESETS = [
   { label: "05:00 - 10:00", start: "05:00", end: "10:00" },
 ];
 const WORKFLOW_STEPS = [
-  "Choose page and folder destination",
-  "Generate the OKURL short link",
+  "Choose social platform destinations",
+  "Generate the short link",
   "Generate and review shorts",
   "Write and prepare the TXT files",
   "Upload the mp4 and matching txt",
@@ -726,6 +729,9 @@ export default function Page() {
 
   const [folderName, setFolderName] = useState("clearviewdaily");
   const [pageName, setPageName] = useState("clearviewdaily");
+  const [xAccountName, setXAccountName] = useState("");
+  const [youtubeAccountName, setYoutubeAccountName] = useState("");
+  const [tiktokAccountName, setTiktokAccountName] = useState("");
 
   const [txtDescriptions, setTxtDescriptions] = useState<string[]>(
     Array.from({ length: TXT_BOX_COUNT }, () => "")
@@ -738,6 +744,7 @@ export default function Page() {
 
   const [longUrl, setLongUrl] = useState("");
   const [customSlug, setCustomSlug] = useState("");
+  const [signUpWallEnabled, setSignUpWallEnabled] = useState(false);
   const [shortUrl, setShortUrl] = useState("");
   const [creatingShortUrl, setCreatingShortUrl] = useState(false);
   const [shortUrlError, setShortUrlError] = useState("");
@@ -777,6 +784,21 @@ export default function Page() {
     if (!currentUser) return [];
     return demoUsers[currentUser.username]?.pages ?? [];
   }, [currentUser]);
+
+  const availableXAccounts = useMemo(() => {
+    if (!currentUser) return [];
+    return demoUsers[currentUser.username]?.xAccounts ?? availablePages;
+  }, [availablePages, currentUser]);
+
+  const availableYoutubeAccounts = useMemo(() => {
+    if (!currentUser) return [];
+    return demoUsers[currentUser.username]?.youtubeAccounts ?? availablePages;
+  }, [availablePages, currentUser]);
+
+  const availableTiktokAccounts = useMemo(() => {
+    if (!currentUser) return [];
+    return demoUsers[currentUser.username]?.tiktokAccounts ?? availablePages;
+  }, [availablePages, currentUser]);
 
   const totalSizeMb = useMemo(() => {
     const total = files.reduce((sum, file) => sum + file.size, 0);
@@ -1022,6 +1044,7 @@ export default function Page() {
     setLongUrl("");
     setShortUrl("");
     setCustomSlug("");
+    setSignUpWallEnabled(false);
     setShortUrlError("");
     setShortUrlSuccess("");
     setShortsSourceUrl("");
@@ -1064,10 +1087,17 @@ export default function Page() {
       ) ??
       user.folders[0] ??
       firstPage;
+    const firstXAccount = user.xAccounts?.[0] ?? firstPage;
+    const firstYoutubeAccount = user.youtubeAccounts?.[0] ?? firstPage;
+    const firstTiktokAccount = user.tiktokAccounts?.[0] ?? firstPage;
 
     setCurrentUser({ username });
     setFolderName(firstFolder);
     setPageName(firstPage);
+    setXAccountName(firstXAccount);
+    setYoutubeAccountName(firstYoutubeAccount);
+    setTiktokAccountName(firstTiktokAccount);
+    setSignUpWallEnabled(false);
     setLoginPassword("");
   };
 
@@ -1082,6 +1112,7 @@ export default function Page() {
     setLongUrl("");
     setShortUrl("");
     setCustomSlug("");
+    setSignUpWallEnabled(false);
     setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
     setShortUrlError("");
     setShortUrlSuccess("");
@@ -1101,6 +1132,9 @@ export default function Page() {
     setShortsJobProgress(null);
     setAddingShortsToUploads(false);
     setAddingTxtsToUploads(false);
+    setXAccountName("");
+    setYoutubeAccountName("");
+    setTiktokAccountName("");
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -1638,6 +1672,7 @@ export default function Page() {
           domain_id: selectedDomain.id,
           path_prefix: selectedDomain.pathPrefix || "s",
           slug: customSlug.trim() || undefined,
+          sign_up_wall: signUpWallEnabled,
         }),
       });
 
@@ -1716,8 +1751,10 @@ export default function Page() {
       return;
     }
 
-    if (!pageName || !folderName) {
-      setError("Please choose a page and folder.");
+    const effectiveFolderName = folderName || pageName;
+
+    if (!pageName || !effectiveFolderName) {
+      setError("Please choose a Facebook Page.");
       return;
     }
 
@@ -1732,7 +1769,11 @@ export default function Page() {
       const formData = new FormData();
       formData.append("username", currentUser.username);
       formData.append("page_name", pageName);
-      formData.append("folder_name", folderName);
+      formData.append("folder_name", effectiveFolderName);
+      formData.append("facebook_page", pageName);
+      formData.append("x_account", xAccountName);
+      formData.append("youtube_account", youtubeAccountName);
+      formData.append("tiktok_account", tiktokAccountName);
       formData.append("title", "");
       formData.append("target_url", longUrlWithUtm || longUrl);
       formData.append("notes", combinedTxtNotes);
@@ -1894,17 +1935,17 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 1</div>
-                      <div style={styles.panelTitle}>Upload settings</div>
+                      <div style={styles.panelTitle}>Social platforms</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Choose the page destination folder first.
+                    Choose the social platform first.
                   </div>
 
                   <div style={styles.formGridTwo}>
                     <div>
-                      <label style={styles.label}>Page Name</label>
+                      <label style={styles.label}>Facebook Page</label>
                       <select
                         style={styles.select}
                         value={pageName}
@@ -1919,13 +1960,60 @@ export default function Page() {
                     </div>
 
                     <div>
-                      <label style={styles.label}>Folder Name</label>
-                      <input
-                        style={styles.inputReadonly}
-                        value={folderName}
-                        readOnly
-                        placeholder="Folder will match the selected page name"
-                      />
+                      <label style={styles.label}>X Account</label>
+                      <select
+                        style={styles.select}
+                        value={xAccountName}
+                        onChange={(e) => setXAccountName(e.target.value)}
+                      >
+                        {availableXAccounts.length ? (
+                          availableXAccounts.map((account) => (
+                            <option key={account} value={account}>
+                              {account}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No X account available</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={styles.label}>YouTube Account</label>
+                      <select
+                        style={styles.select}
+                        value={youtubeAccountName}
+                        onChange={(e) => setYoutubeAccountName(e.target.value)}
+                      >
+                        {availableYoutubeAccounts.length ? (
+                          availableYoutubeAccounts.map((account) => (
+                            <option key={account} value={account}>
+                              {account}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No YouTube account available</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={styles.label}>TikTok Account</label>
+                      <select
+                        style={styles.select}
+                        value={tiktokAccountName}
+                        onChange={(e) => setTiktokAccountName(e.target.value)}
+                      >
+                        {availableTiktokAccounts.length ? (
+                          availableTiktokAccounts.map((account) => (
+                            <option key={account} value={account}>
+                              {account}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No TikTok account available</option>
+                        )}
+                      </select>
                     </div>
                   </div>
                 </section>
@@ -1934,12 +2022,12 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 2</div>
-                      <div style={styles.panelTitle}>OKURL</div>
+                      <div style={styles.panelTitle}>Short link generator</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Enter the original URL, choose the OKURL project, review the UTM values,
+                    Enter the original URL, choose the project, review the UTM values,
                     then generate the short link.
                   </div>
 
@@ -1956,7 +2044,7 @@ export default function Page() {
                       </div>
 
                       <div>
-                        <label style={styles.label}>Project Name</label>
+                        <label style={styles.label}>Project</label>
                         <select
                           style={styles.select}
                           value={selectedProjectId}
@@ -2125,12 +2213,31 @@ export default function Page() {
                         <div>
                           <label style={styles.label}>URL With UTM</label>
                           <textarea
-                            rows={4}
-                            style={{ ...styles.textareaLarge, background: "#f3f6fb" }}
+                            rows={2}
+                            style={{
+                              ...styles.textareaLarge,
+                              minHeight: 68,
+                              background: "#f3f6fb",
+                            }}
                             value={longUrlWithUtm}
                             readOnly
                             placeholder="Paste the original URL above to preview the final tracking URL"
                           />
+                        </div>
+
+                        <div style={styles.toggleCard}>
+                          <label style={styles.toggleRow}>
+                            <input
+                              type="checkbox"
+                              checked={signUpWallEnabled}
+                              onChange={(e) => setSignUpWallEnabled(e.target.checked)}
+                            />
+                            <span style={styles.toggleLabel}>Sign-up Wall</span>
+                          </label>
+                          <div style={styles.helperText}>
+                            Show the OKURL sign-up wall before redirecting to the original
+                            URL.
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2639,12 +2746,20 @@ export default function Page() {
                   <div style={styles.summaryCard}>
                     <div style={styles.actionTitle}>Current summary</div>
                     <div style={styles.summaryRow}>
-                      <span>Page</span>
+                      <span>Facebook Page</span>
                       <strong>{pageName || "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
-                      <span>Folder</span>
-                      <strong>{folderName || "-"}</strong>
+                      <span>X Account</span>
+                      <strong>{xAccountName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>YouTube Account</span>
+                      <strong>{youtubeAccountName || "-"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>TikTok Account</span>
+                      <strong>{tiktokAccountName || "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>Project</span>
@@ -3221,6 +3336,24 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#fbfdff",
     resize: "vertical",
     boxSizing: "border-box",
+  },
+  toggleCard: {
+    borderRadius: 16,
+    border: "1px solid #d9e7f7",
+    background: "#ffffff",
+    padding: "14px 16px",
+  },
+  toggleRow: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 10,
+    cursor: "pointer",
+    color: "#10233f",
+    fontWeight: 700,
+    fontSize: 15,
+  },
+  toggleLabel: {
+    fontWeight: 800,
   },
   primaryButton: {
     border: "none",
