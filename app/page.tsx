@@ -60,6 +60,8 @@ const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_POLL_INTERVAL_MS = 6000;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
+const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 1500;
+const SHORTSGEN_RESULTS_MAX_RETRIES = 6;
 const SHORTS_RANGE_PRESETS = [
   { label: "Full video", start: "", end: "" },
   { label: "First 2 min", start: "00:00", end: "02:00" },
@@ -1318,26 +1320,48 @@ export default function Page() {
         return;
       }
 
-      const resultsRes = await fetch(
-        `/api/shortsgen/jobs/${encodeURIComponent(jobId)}/results`,
-        {
-          cache: "no-store",
-        }
-      );
-      const resultsData = await readResponseData(resultsRes);
+      let clips: ShortsClipOption[] = [];
+      let lastResultsError = "";
 
-      if (!resultsRes.ok) {
-        throw new Error(
-          resultsData?.error ||
-            resultsData?.message ||
-            "Failed to load the generated shorts."
+      for (
+        let resultsAttempt = 0;
+        resultsAttempt < SHORTSGEN_RESULTS_MAX_RETRIES;
+        resultsAttempt += 1
+      ) {
+        const resultsRes = await fetch(
+          `/api/shortsgen/jobs/${encodeURIComponent(jobId)}/results`,
+          {
+            cache: "no-store",
+          }
         );
+        const resultsData = await readResponseData(resultsRes);
+
+        if (!resultsRes.ok) {
+          throw new Error(
+            resultsData?.error ||
+              resultsData?.message ||
+              "Failed to load the generated shorts."
+          );
+        }
+
+        clips = Array.isArray(resultsData?.clips) ? resultsData.clips : [];
+
+        if (clips.length) {
+          break;
+        }
+
+        lastResultsError =
+          resultsData?.error ||
+          resultsData?.message ||
+          "ShortsGen completed, but no clips were returned.";
+
+        if (resultsAttempt < SHORTSGEN_RESULTS_MAX_RETRIES - 1) {
+          await sleep(SHORTSGEN_RESULTS_RETRY_DELAY_MS);
+        }
       }
 
-      const clips = Array.isArray(resultsData?.clips) ? resultsData.clips : [];
-
       if (!clips.length) {
-        throw new Error("ShortsGen completed, but no clips were returned.");
+        throw new Error(lastResultsError || "ShortsGen completed, but no clips were returned.");
       }
 
       setShortsClips(clips);
