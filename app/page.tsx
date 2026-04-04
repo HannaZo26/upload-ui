@@ -61,9 +61,8 @@ type ShortsGenerationMode = "aiClipping" | "manualSelected";
 
 const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
-const SHORTSGEN_POLL_INTERVAL_MS = 6000;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
-const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 300;
+const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 255;
 const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 1500;
 const SHORTSGEN_RESULTS_MAX_RETRIES = 6;
 const SHORTS_RANGE_PRESETS = [
@@ -72,7 +71,7 @@ const SHORTS_RANGE_PRESETS = [
   { label: "First 3 min", start: "00:00", end: "03:00" },
   { label: "First 5 min", start: "00:00", end: "05:00" },
   { label: "First 8 min", start: "00:00", end: "08:00" },
-  { label: "05:00 - 10:00", start: "05:00", end: "10:00" },
+  { label: "First 10 min", start: "00:00", end: "10:00" },
 ];
 const WORKFLOW_STEPS = [
   "Choose social platform destinations",
@@ -93,6 +92,9 @@ const DEMO_TIKTOK_ACCOUNTS = [
   "TikTok Demo Channel B",
   "TikTok Demo Channel C",
 ];
+const AUTH_STORAGE_KEY = "upload_ui_auth_user";
+const DEFAULT_SHORTS_RANGE_START = "00:00";
+const DEFAULT_SHORTS_RANGE_END = "05:00";
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -419,6 +421,12 @@ const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
   return `video${index + 1}.${extension}`;
 };
 
+const getShortsPollDelayMs = (attempt: number) => {
+  if (attempt < 10) return 4000;
+  if (attempt < 30) return 6000;
+  return 10000;
+};
+
 const readDownloadFileName = (contentDisposition: string | null) => {
   if (!contentDisposition) return "";
 
@@ -516,13 +524,6 @@ const demoUsers: Record<string, DemoUser> = {
       "freshpickstoday",
       "dailytalktime",
       "beyondheadlinesdaily",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
     pages: [
       "tastefulworldzh",
@@ -538,13 +539,6 @@ const demoUsers: Record<string, DemoUser> = {
       "freshpickstoday",
       "dailytalktime",
       "beyondheadlinesdaily",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
   },
 
@@ -575,15 +569,6 @@ const demoUsers: Record<string, DemoUser> = {
       "renaradarzh",
       "lukeinsights",
       "heresthequestion",
-      "gjwdailybrief",
-      "freshsharing",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
     pages: [
       "tastefulworldzh",
@@ -610,15 +595,6 @@ const demoUsers: Record<string, DemoUser> = {
       "renaradarzh",
       "lukeinsights",
       "heresthequestion",
-      "gjwdailybrief",
-      "freshsharing",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
   },
 
@@ -649,15 +625,6 @@ const demoUsers: Record<string, DemoUser> = {
       "renaradarzh",
       "lukeinsights",
       "heresthequestion",
-      "gjwdailybrief",
-      "freshsharing",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
     pages: [
       "tastefulworldzh",
@@ -684,15 +651,6 @@ const demoUsers: Record<string, DemoUser> = {
       "renaradarzh",
       "lukeinsights",
       "heresthequestion",
-      "gjwdailybrief",
-      "freshsharing",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
   },
 
@@ -723,15 +681,6 @@ const demoUsers: Record<string, DemoUser> = {
       "renaradarzh",
       "lukeinsights",
       "heresthequestion",
-      "gjwdailybrief",
-      "freshsharing",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
     pages: [
       "tastefulworldzh",
@@ -758,15 +707,6 @@ const demoUsers: Record<string, DemoUser> = {
       "renaradarzh",
       "lukeinsights",
       "heresthequestion",
-      "gjwdailybrief",
-      "freshsharing",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
     ],
   },
 
@@ -788,18 +728,6 @@ const demoUsers: Record<string, DemoUser> = {
     pages: ["horizonupdatesshow", "flashbrieftoday"],
   },
 
-  serenak: {
-    password: "UgeTHGTge@99",
-    folders: ["freshsharing"],
-    pages: ["freshsharing"],
-  },
-
-  athenam: {
-    password: "RWesTjhTg23@19",
-    folders: ["gjwdailybrief"],
-    pages: ["gjwdailybrief"],
-  },
-  
   demo: {
     password: "123",
     folders: [
@@ -852,8 +780,8 @@ export default function Page() {
   const [shortsSourceUrl, setShortsSourceUrl] = useState("");
   const [shortsMode, setShortsMode] =
     useState<ShortsGenerationMode>("aiClipping");
-  const [shortsRangeStart, setShortsRangeStart] = useState("");
-  const [shortsRangeEnd, setShortsRangeEnd] = useState("");
+  const [shortsRangeStart, setShortsRangeStart] = useState(DEFAULT_SHORTS_RANGE_START);
+  const [shortsRangeEnd, setShortsRangeEnd] = useState(DEFAULT_SHORTS_RANGE_END);
   const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
   const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
   const [generatingShorts, setGeneratingShorts] = useState(false);
@@ -1143,6 +1071,44 @@ export default function Page() {
     setUtmFields(firstTemplate.fields);
   }, [selectedProject]);
 
+  const initializeSessionForUser = (username: string) => {
+    const user = demoUsers[username];
+    if (!user) return;
+
+    const firstPage =
+      [...user.pages].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" })
+      )[0] ?? "";
+    const firstFolder =
+      user.folders.find(
+        (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
+      ) ??
+      user.folders[0] ??
+      firstPage;
+
+    setCurrentUser({ username });
+    setFolderName(firstFolder);
+    setPageName(firstPage);
+    setXAccountName("");
+    setYoutubeAccountName("");
+    setTiktokAccountName("");
+    setLoginUsername(username);
+    setLoginPassword("");
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedUsername = window.localStorage
+      .getItem(AUTH_STORAGE_KEY)
+      ?.trim()
+      .toLowerCase();
+
+    if (!savedUsername || !demoUsers[savedUsername]) return;
+
+    initializeSessionForUser(savedUsername);
+  }, []);
+
   const resetUploadForm = () => {
     setFiles([]);
     setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
@@ -1155,8 +1121,8 @@ export default function Page() {
     setShortUrlCopied(false);
     setShortsSourceUrl("");
     setShortsMode("aiClipping");
-    setShortsRangeStart("");
-    setShortsRangeEnd("");
+    setShortsRangeStart(DEFAULT_SHORTS_RANGE_START);
+    setShortsRangeEnd(DEFAULT_SHORTS_RANGE_END);
     setShortsClips([]);
     setSelectedShortIds([]);
     setShortsSuccess("");
@@ -1189,30 +1155,21 @@ export default function Page() {
       return;
     }
 
-    const firstPage = [...user.pages].sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: "base" })
-    )[0] ?? "";
-    const firstFolder =
-      user.folders.find(
-        (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
-      ) ??
-      user.folders[0] ??
-      firstPage;
-    setCurrentUser({ username });
-    setFolderName(firstFolder);
-    setPageName(firstPage);
-    setXAccountName("");
-    setYoutubeAccountName("");
-    setTiktokAccountName("");
+    initializeSessionForUser(username);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, username);
+    }
     setSignUpWallEnabled(false);
     setShortUrlCopied(false);
     setCopiedClipActionKey("");
     setShortsAddedToUploads(false);
     setTxtsAddedToUploads(false);
-    setLoginPassword("");
   };
 
   const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
     setCurrentUser(null);
     setLoginUsername("");
     setLoginPassword("");
@@ -1233,8 +1190,8 @@ export default function Page() {
     setUtmFields(EMPTY_UTM_FIELDS);
     setShortsSourceUrl("");
     setShortsMode("aiClipping");
-    setShortsRangeStart("");
-    setShortsRangeEnd("");
+    setShortsRangeStart(DEFAULT_SHORTS_RANGE_START);
+    setShortsRangeEnd(DEFAULT_SHORTS_RANGE_END);
     setShortsClips([]);
     setSelectedShortIds([]);
     setShortsSuccess("");
@@ -1467,7 +1424,7 @@ export default function Page() {
           );
         }
 
-        await sleep(SHORTSGEN_POLL_INTERVAL_MS);
+        await sleep(getShortsPollDelayMs(attempt));
       }
 
       if (finalStatus !== "COMPLETED") {
@@ -2490,7 +2447,7 @@ export default function Page() {
                               Current range: {shortsRangeSummary}.
                             </div>
                             <div style={styles.helperText}>
-                              Full video on 10+ minute sources can take 20+ minutes, and the
+                              Full video on 10+ minute sources can take 40+ minutes, and the
                               progress bar may pause in the middle while ShortsGen scans the
                               whole video.
                             </div>
@@ -2914,20 +2871,12 @@ export default function Page() {
                       <strong>{tiktokAccountName || "-"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
-                      <span>Project</span>
-                      <strong>{selectedProject?.name || "-"}</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
                       <span>Files</span>
                       <strong>{files.length}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>Total size</span>
                       <strong>{totalSizeMb} MB</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>Short URL</span>
-                      <strong style={styles.summaryBreak}>{shortUrl || "Not set"}</strong>
                     </div>
                   </div>
 
