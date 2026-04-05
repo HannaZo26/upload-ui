@@ -2,17 +2,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type DemoUser = {
-  password: string;
-  folders: string[];
-  pages: string[];
-  xAccounts?: string[];
-  youtubeAccounts?: string[];
-  tiktokAccounts?: string[];
-};
-
 type CurrentUser = {
   username: string;
+  folders: string[];
+  pages: string[];
+  isDemo?: boolean;
 };
 
 type UtmBuilderFields = {
@@ -60,6 +54,7 @@ type ShortsClipOption = {
 type ShortsGenerationMode = "aiClipping" | "manualSelected";
 
 type SavedShortsHistoryEntry = {
+  workspaceId: string;
   jobId: string;
   sourceUrl: string;
   mode: ShortsGenerationMode;
@@ -69,10 +64,34 @@ type SavedShortsHistoryEntry = {
   progress: number | null;
   clips: ShortsClipOption[];
   selectedShortIds: string[];
+  uploadedClipIds: string[];
   createdAt: number;
   updatedAt: number;
   successMessage: string;
   errorMessage: string;
+};
+
+type ShortsWorkspaceState = {
+  workspaceId: string;
+  title: string;
+  isCollapsed: boolean;
+  sourceUrl: string;
+  mode: ShortsGenerationMode;
+  rangeStart: string;
+  rangeEnd: string;
+  clips: ShortsClipOption[];
+  selectedShortIds: string[];
+  uploadedClipIds: string[];
+  generatingShorts: boolean;
+  downloadingShorts: boolean;
+  addingShortsToUploads: boolean;
+  shortsAddedToUploads: boolean;
+  successMessage: string;
+  errorMessage: string;
+  copiedClipActionKey: string;
+  jobId: string;
+  jobStatus: string;
+  jobProgress: number | null;
 };
 
 const SHORT_LINK_DOMAIN = "gjw.us";
@@ -88,6 +107,11 @@ const SHORTS_RANGE_PRESETS = [
   { label: "First 5 min", start: "00:00", end: "05:00" },
   { label: "First 8 min", start: "00:00", end: "08:00" },
   { label: "First 10 min", start: "00:00", end: "10:00" },
+];
+const SHORTS_WORKSPACE_CONFIG = [
+  { workspaceId: "workspace-1", title: "Workspace 1" },
+  { workspaceId: "workspace-2", title: "Workspace 2" },
+  { workspaceId: "workspace-3", title: "Workspace 3" },
 ];
 const WORKFLOW_STEPS = [
   "Choose social platform destinations",
@@ -571,314 +595,36 @@ const replaceGeneratedFiles = (
   return [...preserved, ...incomingFiles];
 };
 
-const demoUsers: Record<string, DemoUser> = {
-  haiyennt: {
-    password: "Hge&geTEg@ge123",
-    folders: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-    ],
-    pages: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-    ],
-  },
-  hannah: {
-    password: "UhgTRg@kg$253",
-    folders: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "horizonupdatesshow",
-      "flashbrieftoday",
-      "everydayvitalityzh",
-      "healthyrhythmdaily",
-      "renaradar",
-      "renaradarzh",
-      "lukeinsights",
-      "heresthequestion",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-      "gjwdailybrief",
-      "freshsharing",
-    ],
-    pages: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "horizonupdatesshow",
-      "flashbrieftoday",
-      "everydayvitalityzh",
-      "healthyrhythmdaily",
-      "renaradar",
-      "renaradarzh",
-      "lukeinsights",
-      "heresthequestion",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-      "gjwdailybrief",
-      "freshsharing",
-    ],
-  },
-  karen: {
-    password: "jgGTR#kg$93",
-    folders: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "horizonupdatesshow",
-      "flashbrieftoday",
-      "everydayvitalityzh",
-      "healthyrhythmdaily",
-      "renaradar",
-      "renaradarzh",
-      "lukeinsights",
-      "heresthequestion",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-      "gjwdailybrief",
-      "freshsharing",
-    ],
-    pages: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "horizonupdatesshow",
-      "flashbrieftoday",
-      "everydayvitalityzh",
-      "healthyrhythmdaily",
-      "renaradar",
-      "renaradarzh",
-      "lukeinsights",
-      "heresthequestion",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-      "gjwdailybrief",
-      "freshsharing",
-    ],
-  },
-  joanne: {
-    password: "TygMcK@kf$13",
-    folders: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "horizonupdatesshow",
-      "flashbrieftoday",
-      "everydayvitalityzh",
-      "healthyrhythmdaily",
-      "renaradar",
-      "renaradarzh",
-      "lukeinsights",
-      "heresthequestion",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-      "gjwdailybrief",
-      "freshsharing",
-    ],
-    pages: [
-      "tastefulworldzh",
-      "feelgoodbeautyzh",
-      "worldtravelerszh",
-      "culturalwander",
-      "gjwmysteries",
-      "healthyliving",
-      "tastefulworld",
-      "feelgoodbeauty",
-      "worldtravelers",
-      "exclusivevisiondaily",
-      "freshpickstoday",
-      "dailytalktime",
-      "beyondheadlinesdaily",
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "horizonupdatesshow",
-      "flashbrieftoday",
-      "everydayvitalityzh",
-      "healthyrhythmdaily",
-      "renaradar",
-      "renaradarzh",
-      "lukeinsights",
-      "heresthequestion",
-      "gjwplus",
-      "beyondtheknown",
-      "gjwplussports",
-      "gjwplusdocs",
-      "gjwplusseries",
-      "gjwplusclassics",
-      "gjwpluskids",
-      "gjwdailybrief",
-      "freshsharing",
-    ],
-  },
-  ying: {
-    password: "HGtYEG$eff@323",
-    folders: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
-    pages: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
-  },
-  ivyzhang: {
-    password: "ygeTTge$eff@#24",
-    folders: ["everydayvitalityzh", "healthyrhythmdaily"],
-    pages: ["everydayvitalityzh", "healthyrhythmdaily"],
-  },
-  lucywang: {
-    password: "GhyTge#rge@87",
-    folders: ["horizonupdatesshow", "flashbrieftoday"],
-    pages: ["horizonupdatesshow", "flashbrieftoday"],
-  },
-  serenak: {
-    password: "UgeTHGTge@99",
-    folders: ["freshsharing"],
-    pages: ["freshsharing"],
-  },
-  athenam: {
-    password: "RWesTjhTg23@19",
-    folders: ["gjwdailybrief"],
-    pages: ["gjwdailybrief"],
-  },
-  demo: {
-    password: "123",
-    folders: [
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "flashbrieftoday",
-    ],
-    pages: [
-      "clearviewdaily",
-      "viewscopedaily",
-      "dailytrendpulse",
-      "flashbrieftoday",
-    ],
-  },
-};
+const createInitialShortsWorkspaceState = (
+  workspaceId: string,
+  title: string
+): ShortsWorkspaceState => ({
+  workspaceId,
+  title,
+  isCollapsed: false,
+  sourceUrl: "",
+  mode: "aiClipping",
+  rangeStart: "00:00",
+  rangeEnd: "05:00",
+  clips: [],
+  selectedShortIds: [],
+  uploadedClipIds: [],
+  generatingShorts: false,
+  downloadingShorts: false,
+  addingShortsToUploads: false,
+  shortsAddedToUploads: false,
+  successMessage: "",
+  errorMessage: "",
+  copiedClipActionKey: "",
+  jobId: "",
+  jobStatus: "",
+  jobProgress: null,
+});
+
+const createInitialShortsWorkspaces = () =>
+  SHORTS_WORKSPACE_CONFIG.map((item) =>
+    createInitialShortsWorkspaceState(item.workspaceId, item.title)
+  );
 
 export default function Page() {
   const [loginUsername, setLoginUsername] = useState("");
@@ -909,25 +655,12 @@ export default function Page() {
   const [shortUrlError, setShortUrlError] = useState("");
   const [shortUrlSuccess, setShortUrlSuccess] = useState("");
   const [shortUrlCopied, setShortUrlCopied] = useState(false);
-  const [shortsSourceUrl, setShortsSourceUrl] = useState("");
-  const [shortsMode, setShortsMode] =
-    useState<ShortsGenerationMode>("aiClipping");
-  const [shortsRangeStart, setShortsRangeStart] = useState("00:00");
-  const [shortsRangeEnd, setShortsRangeEnd] = useState("05:00");
-  const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
-  const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
-  const [generatingShorts, setGeneratingShorts] = useState(false);
-  const [downloadingShorts, setDownloadingShorts] = useState(false);
-  const [addingShortsToUploads, setAddingShortsToUploads] = useState(false);
+  const [shortsWorkspaces, setShortsWorkspaces] =
+    useState<ShortsWorkspaceState[]>(createInitialShortsWorkspaces());
+  const [activeShortsWorkspaceId, setActiveShortsWorkspaceId] =
+    useState<string>(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
   const [addingTxtsToUploads, setAddingTxtsToUploads] = useState(false);
-  const [shortsAddedToUploads, setShortsAddedToUploads] = useState(false);
   const [txtsAddedToUploads, setTxtsAddedToUploads] = useState(false);
-  const [shortsSuccess, setShortsSuccess] = useState("");
-  const [shortsError, setShortsError] = useState("");
-  const [copiedClipActionKey, setCopiedClipActionKey] = useState("");
-  const [shortsJobId, setShortsJobId] = useState("");
-  const [shortsJobStatus, setShortsJobStatus] = useState("");
-  const [shortsJobProgress, setShortsJobProgress] = useState<number | null>(null);
   const [shortsHistory, setShortsHistory] = useState<SavedShortsHistoryEntry[]>([]);
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
@@ -942,12 +675,12 @@ export default function Page() {
 
   const availableFolders = useMemo(() => {
     if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.folders ?? [];
+    return currentUser.folders ?? [];
   }, [currentUser]);
 
   const availablePages = useMemo(() => {
     if (!currentUser) return [];
-    return [...(demoUsers[currentUser.username]?.pages ?? [])].sort((a, b) =>
+    return [...(currentUser.pages ?? [])].sort((a, b) =>
       a.localeCompare(b, undefined, { sensitivity: "base" })
     );
   }, [currentUser]);
@@ -1006,12 +739,54 @@ export default function Page() {
   const shortsHistoryStorageKey = currentUser
     ? buildShortsHistoryStorageKey(currentUser.username)
     : "";
-  const activeShortsMonitorRef = useRef("");
+  const activeShortsWorkspace = useMemo(
+    () =>
+      shortsWorkspaces.find((item) => item.workspaceId === activeShortsWorkspaceId) ??
+      shortsWorkspaces[0] ??
+      createInitialShortsWorkspaceState("workspace-1", "Workspace 1"),
+    [activeShortsWorkspaceId, shortsWorkspaces]
+  );
+  const activeShortsMonitorRef = useRef<Record<string, string>>({});
+
+  const updateShortsWorkspace = useCallback(
+    (
+      workspaceId: string,
+      updater:
+        | Partial<ShortsWorkspaceState>
+        | ((workspace: ShortsWorkspaceState) => Partial<ShortsWorkspaceState>)
+    ) => {
+      setShortsWorkspaces((prev) =>
+        prev.map((workspace) => {
+          if (workspace.workspaceId !== workspaceId) return workspace;
+          const patch = typeof updater === "function" ? updater(workspace) : updater;
+          return {
+            ...workspace,
+            ...patch,
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const replaceShortsWorkspace = useCallback(
+    (workspaceId: string, nextWorkspace: ShortsWorkspaceState) => {
+      setShortsWorkspaces((prev) =>
+        prev.map((workspace) =>
+          workspace.workspaceId === workspaceId ? nextWorkspace : workspace
+        )
+      );
+    },
+    []
+  );
 
   const persistSessionState = useCallback(
-    (username: string, nextPageName: string, nextFolderName: string) => {
+    (user: CurrentUser, nextPageName: string, nextFolderName: string) => {
       writeStoredJson(SESSION_STORAGE_KEY, {
-        username,
+        username: user.username,
+        pages: user.pages,
+        folders: user.folders,
+        isDemo: Boolean(user.isDemo),
         pageName: nextPageName,
         folderName: nextFolderName,
       });
@@ -1032,23 +807,43 @@ export default function Page() {
     [currentUser, shortsHistoryStorageKey]
   );
 
-  const hydrateShortsEntry = useCallback((entry: SavedShortsHistoryEntry) => {
-    setShortsSourceUrl(entry.sourceUrl || "");
-    setShortsMode(entry.mode || "aiClipping");
-    setShortsRangeStart(entry.rangeStart || "00:00");
-    setShortsRangeEnd(entry.rangeEnd || "05:00");
-    setShortsJobId(entry.jobId || "");
-    setShortsJobStatus(entry.status || "");
-    setShortsJobProgress(typeof entry.progress === "number" ? entry.progress : null);
-    setShortsClips(Array.isArray(entry.clips) ? entry.clips : []);
-    setSelectedShortIds(Array.isArray(entry.selectedShortIds) ? entry.selectedShortIds : []);
-    setShortsSuccess(entry.successMessage || "");
-    setShortsError(entry.errorMessage || "");
-  }, []);
+  const hydrateShortsEntry = useCallback(
+    (entry: SavedShortsHistoryEntry) => {
+      const workspaceId = entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId;
+      const config =
+        SHORTS_WORKSPACE_CONFIG.find((item) => item.workspaceId === workspaceId) ||
+        SHORTS_WORKSPACE_CONFIG[0];
 
-  const shortsRangeSummary = useMemo(() => {
-    const startSec = parseTimecodeToSeconds(shortsRangeStart);
-    const endSec = parseTimecodeToSeconds(shortsRangeEnd);
+      updateShortsWorkspace(workspaceId, (workspace) => ({
+        title: config.title,
+        sourceUrl: entry.sourceUrl || "",
+        mode: entry.mode || "aiClipping",
+        rangeStart: entry.rangeStart || "00:00",
+        rangeEnd: entry.rangeEnd || "05:00",
+        jobId: entry.jobId || "",
+        jobStatus: entry.status || "",
+        jobProgress: typeof entry.progress === "number" ? entry.progress : null,
+        clips: Array.isArray(entry.clips) ? entry.clips : [],
+        selectedShortIds: Array.isArray(entry.selectedShortIds)
+          ? entry.selectedShortIds
+          : [],
+        uploadedClipIds: Array.isArray(entry.uploadedClipIds)
+          ? entry.uploadedClipIds
+          : [],
+        successMessage: entry.successMessage || "",
+        errorMessage: entry.errorMessage || "",
+        shortsAddedToUploads: false,
+        copiedClipActionKey: "",
+        isCollapsed: workspace.isCollapsed,
+      }));
+      setActiveShortsWorkspaceId(workspaceId);
+    },
+    [updateShortsWorkspace]
+  );
+
+  const getShortsRangeSummary = useCallback((rangeStart: string, rangeEnd: string) => {
+    const startSec = parseTimecodeToSeconds(rangeStart);
+    const endSec = parseTimecodeToSeconds(rangeEnd);
 
     if (startSec === null && endSec === null) {
       return "Full video";
@@ -1059,8 +854,7 @@ export default function Page() {
     }
 
     return "Custom range";
-  }, [shortsRangeStart, shortsRangeEnd]);
-
+  }, []);
   const loadOkurlDomains = useCallback(async () => {
     try {
       const res = await fetch("/api/okurl-domains", {
@@ -1238,33 +1032,38 @@ export default function Page() {
   useEffect(() => {
     const savedSession = readStoredJson<{
       username?: string;
+      pages?: string[];
+      folders?: string[];
+      isDemo?: boolean;
       pageName?: string;
       folderName?: string;
     } | null>(SESSION_STORAGE_KEY, null);
 
-    if (!savedSession?.username) return;
+    if (!savedSession?.username || !savedSession.pages?.length || !savedSession.folders?.length) return;
 
-    const user = demoUsers[savedSession.username];
-    if (!user) return;
-
-    const sortedPages = [...user.pages].sort((a, b) =>
+    const sortedPages = [...savedSession.pages].sort((a, b) =>
       a.localeCompare(b, undefined, { sensitivity: "base" })
     );
     const restoredPage =
-      (savedSession.pageName && user.pages.includes(savedSession.pageName)
+      (savedSession.pageName && savedSession.pages.includes(savedSession.pageName)
         ? savedSession.pageName
         : sortedPages[0]) || "";
     const restoredFolder =
-      (savedSession.folderName && user.folders.includes(savedSession.folderName)
+      (savedSession.folderName && savedSession.folders.includes(savedSession.folderName)
         ? savedSession.folderName
-        : user.folders.find(
+        : savedSession.folders.find(
             (folder) =>
               folder.trim().toLowerCase() === restoredPage.trim().toLowerCase()
           )) ||
-      user.folders[0] ||
+      savedSession.folders[0] ||
       restoredPage;
 
-    setCurrentUser({ username: savedSession.username });
+    setCurrentUser({
+      username: savedSession.username,
+      pages: savedSession.pages,
+      folders: savedSession.folders,
+      isDemo: Boolean(savedSession.isDemo),
+    });
     setLoginUsername(savedSession.username);
     setFolderName(restoredFolder);
     setPageName(restoredPage);
@@ -1273,6 +1072,7 @@ export default function Page() {
   useEffect(() => {
     if (!currentUser) {
       setShortsHistory([]);
+      setShortsWorkspaces(createInitialShortsWorkspaces());
       return;
     }
 
@@ -1282,16 +1082,46 @@ export default function Page() {
     );
 
     setShortsHistory(storedHistory);
+    setShortsWorkspaces(() => {
+      const next = createInitialShortsWorkspaces();
+      for (const workspace of next) {
+        const latestEntry = storedHistory.find(
+          (entry) => (entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId) === workspace.workspaceId
+        );
+        if (latestEntry) {
+          Object.assign(workspace, {
+            sourceUrl: latestEntry.sourceUrl || "",
+            mode: latestEntry.mode || "aiClipping",
+            rangeStart: latestEntry.rangeStart || "00:00",
+            rangeEnd: latestEntry.rangeEnd || "05:00",
+            jobId: latestEntry.jobId || "",
+            jobStatus: latestEntry.status || "",
+            jobProgress:
+              typeof latestEntry.progress === "number" ? latestEntry.progress : null,
+            clips: Array.isArray(latestEntry.clips) ? latestEntry.clips : [],
+            selectedShortIds: Array.isArray(latestEntry.selectedShortIds)
+              ? latestEntry.selectedShortIds
+              : [],
+            uploadedClipIds: Array.isArray(latestEntry.uploadedClipIds)
+              ? latestEntry.uploadedClipIds
+              : [],
+            successMessage: latestEntry.successMessage || "",
+            errorMessage: latestEntry.errorMessage || "",
+          });
+        }
+      }
+      return next;
+    });
 
     const latestEntry = storedHistory[0];
-    if (latestEntry) {
-      hydrateShortsEntry(latestEntry);
+    if (latestEntry?.workspaceId) {
+      setActiveShortsWorkspaceId(latestEntry.workspaceId);
     }
-  }, [currentUser, hydrateShortsEntry]);
+  }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
-    persistSessionState(currentUser.username, pageName, folderName || pageName);
+    persistSessionState(currentUser, pageName, folderName || pageName);
   }, [currentUser, folderName, pageName, persistSessionState]);
 
   useEffect(() => {
@@ -1335,21 +1165,9 @@ export default function Page() {
     setShortUrlError("");
     setShortUrlSuccess("");
     setShortUrlCopied(false);
-    setShortsSourceUrl("");
-    setShortsMode("aiClipping");
-    setShortsRangeStart("00:00");
-    setShortsRangeEnd("05:00");
-    setShortsClips([]);
-    setSelectedShortIds([]);
-    setShortsSuccess("");
-    setShortsError("");
-    setCopiedClipActionKey("");
-    setShortsJobId("");
-    setShortsJobStatus("");
-    setShortsJobProgress(null);
-    setAddingShortsToUploads(false);
+    setShortsWorkspaces(createInitialShortsWorkspaces());
+    setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
     setAddingTxtsToUploads(false);
-    setShortsAddedToUploads(false);
     setTxtsAddedToUploads(false);
 
     if (fileInputRef.current) {
@@ -1357,39 +1175,63 @@ export default function Page() {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
     setSuccess("");
     setError("");
 
     const username = loginUsername.trim().toLowerCase();
-    const user = demoUsers[username];
-
-    if (!user || user.password !== loginPassword) {
-      setAuthError("Invalid username or password.");
+    if (!username || !loginPassword) {
+      setAuthError("Please enter your username and password.");
       return;
     }
 
-    const firstPage = [...user.pages].sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: "base" })
-    )[0] ?? "";
-    const firstFolder =
-      user.folders.find(
-        (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
-      ) ??
-      user.folders[0] ??
-      firstPage;
-    setCurrentUser({ username });
-    setFolderName(firstFolder);
-    setPageName(firstPage);
-    persistSessionState(username, firstPage, firstFolder);
-    setSignUpWallEnabled(false);
-    setShortUrlCopied(false);
-    setCopiedClipActionKey("");
-    setShortsAddedToUploads(false);
-    setTxtsAddedToUploads(false);
-    setLoginPassword("");
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: loginPassword }),
+      });
+      const data = await readResponseData(res);
+
+      if (!res.ok || !data?.user) {
+        setAuthError(data?.error || data?.message || "Invalid username or password.");
+        return;
+      }
+
+      const userPages = Array.isArray(data.user.pages) ? data.user.pages : [];
+      const userFolders = Array.isArray(data.user.folders) ? data.user.folders : [];
+      const nextUser: CurrentUser = {
+        username,
+        pages: userPages,
+        folders: userFolders,
+        isDemo: Boolean(data.user.isDemo),
+      };
+
+      const firstPage = [...userPages].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" })
+      )[0] ?? "";
+      const firstFolder =
+        userFolders.find(
+          (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
+        ) ??
+        userFolders[0] ??
+        firstPage;
+      setCurrentUser(nextUser);
+      setFolderName(firstFolder);
+      setPageName(firstPage);
+      persistSessionState(nextUser, firstPage, firstFolder);
+      setSignUpWallEnabled(false);
+      setShortUrlCopied(false);
+      setShortsWorkspaces(createInitialShortsWorkspaces());
+      setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
+      setAddingTxtsToUploads(false);
+      setTxtsAddedToUploads(false);
+      setLoginPassword("");
+    } catch (err: any) {
+      setAuthError(err?.message || "Unable to sign in right now.");
+    }
   };
 
   const handleLogout = () => {
@@ -1412,21 +1254,9 @@ export default function Page() {
     setSelectedProjectId("");
     setSelectedUtmTemplateKey("");
     setUtmFields(EMPTY_UTM_FIELDS);
-    setShortsSourceUrl("");
-    setShortsMode("aiClipping");
-    setShortsRangeStart("00:00");
-    setShortsRangeEnd("05:00");
-    setShortsClips([]);
-    setSelectedShortIds([]);
-    setShortsSuccess("");
-    setShortsError("");
-    setCopiedClipActionKey("");
-    setShortsJobId("");
-    setShortsJobStatus("");
-    setShortsJobProgress(null);
-    setAddingShortsToUploads(false);
+    setShortsWorkspaces(createInitialShortsWorkspaces());
+    setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
     setAddingTxtsToUploads(false);
-    setShortsAddedToUploads(false);
     setTxtsAddedToUploads(false);
     setShortsHistory([]);
   };
@@ -1471,7 +1301,7 @@ export default function Page() {
     setFolderName(linkedFolder);
 
     if (currentUser) {
-      persistSessionState(currentUser.username, value, linkedFolder);
+      persistSessionState(currentUser, value, linkedFolder);
     }
   };
 
@@ -1493,12 +1323,15 @@ export default function Page() {
     }));
   };
 
-  const applyShortsRangePreset = (start: string, end: string) => {
-    if (!start && !end && shortsMode === "manualSelected") {
-      setShortsMode("aiClipping");
-    }
-    setShortsRangeStart(start);
-    setShortsRangeEnd(end);
+  const applyShortsRangePreset = (workspaceId: string, start: string, end: string) => {
+    updateShortsWorkspace(workspaceId, (workspace) => ({
+      mode: !start && !end && workspace.mode === "manualSelected" ? "aiClipping" : workspace.mode,
+      rangeStart: start,
+      rangeEnd: end,
+      errorMessage: "",
+      successMessage: "",
+    }));
+    setActiveShortsWorkspaceId(workspaceId);
   };
 
   const fetchShortsResultsForJob = useCallback(async (jobId: string) => {
@@ -1547,6 +1380,7 @@ export default function Page() {
 
   const monitorShortsJob = useCallback(
     async ({
+      workspaceId,
       jobId,
       sourceUrl,
       mode,
@@ -1554,6 +1388,7 @@ export default function Page() {
       rangeEnd,
       createdAt,
     }: {
+      workspaceId: string;
       jobId: string;
       sourceUrl: string;
       mode: ShortsGenerationMode;
@@ -1562,11 +1397,9 @@ export default function Page() {
       createdAt: number;
     }) => {
       if (!jobId) return;
-      if (activeShortsMonitorRef.current === jobId) return;
+      if (activeShortsMonitorRef.current[workspaceId] === jobId) return;
 
-      activeShortsMonitorRef.current = jobId;
-      const startSec = parseTimecodeToSeconds(rangeStart);
-      const endSec = parseTimecodeToSeconds(rangeEnd);
+      activeShortsMonitorRef.current[workspaceId] = jobId;
       const hasRangeInput = Boolean(rangeStart.trim()) || Boolean(rangeEnd.trim());
       const isFullVideoAiClipping = mode === "aiClipping" && !hasRangeInput;
       const maxPollAttempts = isFullVideoAiClipping
@@ -1574,8 +1407,12 @@ export default function Page() {
         : SHORTSGEN_MAX_POLL_ATTEMPTS;
 
       try {
-        setGeneratingShorts(true);
+        updateShortsWorkspace(workspaceId, {
+          generatingShorts: true,
+          errorMessage: "",
+        });
         let finalStatus = "";
+        let latestProgress: number | null = null;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
           const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
@@ -1592,29 +1429,35 @@ export default function Page() {
           }
 
           finalStatus = pickFirstString(statusData?.status).toUpperCase();
-          setShortsJobId(jobId);
-          setShortsJobStatus(finalStatus);
           const explicitProgressRaw =
             typeof statusData?.progress === "number" ||
             typeof statusData?.progress === "string"
               ? Number(statusData.progress)
               : null;
-          const explicitProgress =
+          latestProgress =
             explicitProgressRaw !== null && Number.isFinite(explicitProgressRaw)
               ? Math.max(0, Math.min(100, Math.round(explicitProgressRaw)))
               : null;
-          setShortsJobProgress(explicitProgress);
+
+          updateShortsWorkspace(workspaceId, {
+            jobId,
+            jobStatus: finalStatus,
+            jobProgress: latestProgress,
+            generatingShorts: finalStatus !== "COMPLETED" && finalStatus !== "FAILED",
+          });
 
           persistShortsHistoryEntry({
+            workspaceId,
             jobId,
             sourceUrl,
             mode,
             rangeStart,
             rangeEnd,
             status: finalStatus || "IN_PROGRESS",
-            progress: explicitProgress,
+            progress: latestProgress,
             clips: [],
             selectedShortIds: [],
+            uploadedClipIds: [],
             createdAt,
             updatedAt: Date.now(),
             successMessage: "",
@@ -1622,7 +1465,9 @@ export default function Page() {
           });
 
           if (finalStatus === "COMPLETED") {
-            setShortsJobProgress(100);
+            updateShortsWorkspace(workspaceId, {
+              jobProgress: 100,
+            });
             break;
           }
 
@@ -1641,26 +1486,31 @@ export default function Page() {
         if (finalStatus !== "COMPLETED") {
           throw new Error(
             isFullVideoAiClipping
-              ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs around 10+ minutes can pause at mid-progress for a long time. Please wait a bit longer and try again, or use First 2 min / First 3 min / First 5 min for much faster results."
+              ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs can take a long time. Please wait a bit longer or use First 2 / 3 / 5 min for faster results."
               : "ShortsGen is still processing this job. Please wait a little longer and try again."
           );
         }
 
         const clips = await fetchShortsResultsForJob(jobId);
         const preselectedIds = clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id);
-
-        setShortsClips(clips.slice(0, Math.min(2, clips.length)));
+        updateShortsWorkspace(workspaceId, {
+          clips: clips.slice(0, Math.min(2, clips.length)),
+          jobProgress: 100,
+          jobStatus: "COMPLETED",
+          generatingShorts: false,
+          errorMessage: "",
+        });
         window.setTimeout(() => {
-          setShortsClips(clips);
-          setSelectedShortIds(preselectedIds);
-        }, 120);
-        setShortsJobProgress(100);
-        setShortsSuccess(
-          `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`
-        );
-        setShortsError("");
+          updateShortsWorkspace(workspaceId, {
+            clips,
+            selectedShortIds: preselectedIds,
+            successMessage:
+              `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`,
+          });
+        }, 80);
 
         persistShortsHistoryEntry({
+          workspaceId,
           jobId,
           sourceUrl,
           mode,
@@ -1670,6 +1520,7 @@ export default function Page() {
           progress: 100,
           clips,
           selectedShortIds: preselectedIds,
+          uploadedClipIds: [],
           createdAt,
           updatedAt: Date.now(),
           successMessage:
@@ -1678,58 +1529,68 @@ export default function Page() {
         });
       } catch (err: any) {
         const message = err?.message || "Failed to prepare the shorts preview.";
-        setShortsError(message);
+        updateShortsWorkspace(workspaceId, (workspace) => ({
+          generatingShorts: false,
+          errorMessage: message,
+          successMessage: "",
+          jobStatus: workspace.jobStatus || "FAILED",
+        }));
 
         persistShortsHistoryEntry({
+          workspaceId,
           jobId,
           sourceUrl,
           mode,
           rangeStart,
           rangeEnd,
-          status: shortsJobStatus || "FAILED",
-          progress: shortsJobProgress,
+          status: "FAILED",
+          progress: null,
           clips: [],
           selectedShortIds: [],
+          uploadedClipIds: [],
           createdAt,
           updatedAt: Date.now(),
           successMessage: "",
           errorMessage: message,
         });
       } finally {
-        if (activeShortsMonitorRef.current === jobId) {
-          activeShortsMonitorRef.current = "";
+        if (activeShortsMonitorRef.current[workspaceId] === jobId) {
+          delete activeShortsMonitorRef.current[workspaceId];
         }
-        setGeneratingShorts(false);
+        updateShortsWorkspace(workspaceId, {
+          generatingShorts: false,
+        });
       }
     },
-    [fetchShortsResultsForJob, persistShortsHistoryEntry, shortsJobProgress, shortsJobStatus]
+    [fetchShortsResultsForJob, persistShortsHistoryEntry, updateShortsWorkspace]
   );
 
   useEffect(() => {
     if (!currentUser || !shortsHistory.length) return;
 
-    const latestEntry = shortsHistory[0];
-    if (!latestEntry) return;
+    const pendingEntries = shortsHistory.filter(
+      (entry) => !isTerminalShortsStatus(entry.status) && entry.jobId
+    );
 
-    hydrateShortsEntry(latestEntry);
-
-    if (!isTerminalShortsStatus(latestEntry.status) && latestEntry.jobId) {
+    pendingEntries.forEach((entry) => {
       monitorShortsJob({
-        jobId: latestEntry.jobId,
-        sourceUrl: latestEntry.sourceUrl,
-        mode: latestEntry.mode,
-        rangeStart: latestEntry.rangeStart,
-        rangeEnd: latestEntry.rangeEnd,
-        createdAt: latestEntry.createdAt || Date.now(),
+        workspaceId: entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId,
+        jobId: entry.jobId,
+        sourceUrl: entry.sourceUrl,
+        mode: entry.mode,
+        rangeStart: entry.rangeStart,
+        rangeEnd: entry.rangeEnd,
+        createdAt: entry.createdAt || Date.now(),
       });
-    }
-  }, [currentUser, hydrateShortsEntry, monitorShortsJob, shortsHistory]);
+    });
+  }, [currentUser, monitorShortsJob, shortsHistory]);
 
   const restoreShortsHistoryEntry = (entry: SavedShortsHistoryEntry) => {
     hydrateShortsEntry(entry);
 
     if (!isTerminalShortsStatus(entry.status) && entry.jobId) {
       monitorShortsJob({
+        workspaceId: entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId,
         jobId: entry.jobId,
         sourceUrl: entry.sourceUrl,
         mode: entry.mode,
@@ -1740,37 +1601,53 @@ export default function Page() {
     }
   };
 
-  const generateShorts = async () => {
-    setShortsError("");
-    setShortsSuccess("");
+  const generateShorts = async (workspaceId: string) => {
+    const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+    if (!workspace) return;
 
-    if (!shortsSourceUrl.trim()) {
-      setShortsError("Please enter the long-video URL first.");
+    setActiveShortsWorkspaceId(workspaceId);
+    updateShortsWorkspace(workspaceId, {
+      errorMessage: "",
+      successMessage: "",
+      uploadedClipIds: [],
+      shortsAddedToUploads: false,
+    });
+
+    if (!workspace.sourceUrl.trim()) {
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "Please enter the long-video URL first.",
+      });
       return;
     }
 
-    const startSec = parseTimecodeToSeconds(shortsRangeStart);
-    const endSec = parseTimecodeToSeconds(shortsRangeEnd);
+    const startSec = parseTimecodeToSeconds(workspace.rangeStart);
+    const endSec = parseTimecodeToSeconds(workspace.rangeEnd);
     const hasRangeInput =
-      Boolean(shortsRangeStart.trim()) || Boolean(shortsRangeEnd.trim());
+      Boolean(workspace.rangeStart.trim()) || Boolean(workspace.rangeEnd.trim());
 
     if (hasRangeInput && (startSec === null || endSec === null)) {
-      setShortsError("Please enter a valid start and end time like 00:00 or 05:30.");
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "Please enter a valid start and end time like 00:00 or 05:30.",
+      });
       return;
     }
 
     if (startSec !== null && endSec !== null && endSec <= startSec) {
-      setShortsError("The end time must be later than the start time.");
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "The end time must be later than the start time.",
+      });
       return;
     }
 
-    if (shortsMode === "manualSelected" && !hasRangeInput) {
-      setShortsError("Manual Selection needs a start and end time range.");
+    if (workspace.mode === "manualSelected" && !hasRangeInput) {
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "Manual Selection needs a start and end time range.",
+      });
       return;
     }
 
     const shortsOptions =
-      shortsMode === "manualSelected"
+      workspace.mode === "manualSelected"
         ? {
             mode: "manualSelected",
             user_selected: {
@@ -1803,12 +1680,17 @@ export default function Page() {
           };
 
     try {
-      setGeneratingShorts(true);
-      setShortsClips([]);
-      setSelectedShortIds([]);
-      setShortsJobId("");
-      setShortsJobStatus("");
-      setShortsJobProgress(null);
+      updateShortsWorkspace(workspaceId, {
+        generatingShorts: true,
+        clips: [],
+        selectedShortIds: [],
+        uploadedClipIds: [],
+        jobId: "",
+        jobStatus: "",
+        jobProgress: null,
+        errorMessage: "",
+        successMessage: "",
+      });
 
       const createRes = await fetch("/api/shortsgen/jobs", {
         method: "POST",
@@ -1816,7 +1698,7 @@ export default function Page() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          source_url: shortsSourceUrl.trim(),
+          source_url: workspace.sourceUrl.trim(),
           options: shortsOptions,
         }),
       });
@@ -1838,20 +1720,24 @@ export default function Page() {
       }
 
       const createdAt = Date.now();
-      setShortsJobId(jobId);
-      setShortsJobStatus("SCHEDULED");
-      setShortsJobProgress(0);
+      updateShortsWorkspace(workspaceId, {
+        jobId,
+        jobStatus: "SCHEDULED",
+        jobProgress: 0,
+      });
 
       persistShortsHistoryEntry({
+        workspaceId,
         jobId,
-        sourceUrl: shortsSourceUrl.trim(),
-        mode: shortsMode,
-        rangeStart: shortsRangeStart,
-        rangeEnd: shortsRangeEnd,
+        sourceUrl: workspace.sourceUrl.trim(),
+        mode: workspace.mode,
+        rangeStart: workspace.rangeStart,
+        rangeEnd: workspace.rangeEnd,
         status: "SCHEDULED",
         progress: 0,
         clips: [],
         selectedShortIds: [],
+        uploadedClipIds: [],
         createdAt,
         updatedAt: createdAt,
         successMessage: "",
@@ -1859,28 +1745,33 @@ export default function Page() {
       });
 
       await monitorShortsJob({
+        workspaceId,
         jobId,
-        sourceUrl: shortsSourceUrl.trim(),
-        mode: shortsMode,
-        rangeStart: shortsRangeStart,
-        rangeEnd: shortsRangeEnd,
+        sourceUrl: workspace.sourceUrl.trim(),
+        mode: workspace.mode,
+        rangeStart: workspace.rangeStart,
+        rangeEnd: workspace.rangeEnd,
         createdAt,
       });
     } catch (err: any) {
-      setShortsError(err?.message || "Failed to prepare the shorts preview.");
-      setGeneratingShorts(false);
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: err?.message || "Failed to prepare the shorts preview.",
+        generatingShorts: false,
+      });
     }
   };
 
-  const toggleShortSelection = (clipId: string) => {
-    setSelectedShortIds((prev) =>
-      prev.includes(clipId)
-        ? prev.filter((id) => id !== clipId)
-        : [...prev, clipId]
-    );
+  const toggleShortSelection = (workspaceId: string, clipId: string) => {
+    setActiveShortsWorkspaceId(workspaceId);
+    updateShortsWorkspace(workspaceId, (workspace) => ({
+      selectedShortIds: workspace.selectedShortIds.includes(clipId)
+        ? workspace.selectedShortIds.filter((id) => id !== clipId)
+        : [...workspace.selectedShortIds, clipId],
+    }));
   };
 
   const copyClipText = async (
+    workspaceId: string,
     clipId: string,
     value: string,
     label: "title" | "description"
@@ -1888,38 +1779,56 @@ export default function Page() {
     const trimmed = value.trim();
 
     if (!trimmed) {
-      setShortsError(`No ${label.toLowerCase()} is available to copy.`);
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: `No ${label.toLowerCase()} is available to copy.`,
+      });
       return;
     }
 
     try {
       await navigator.clipboard.writeText(trimmed);
-      setShortsError("");
       const actionKey = `${clipId}:${label}`;
-      setCopiedClipActionKey(actionKey);
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "",
+        copiedClipActionKey: actionKey,
+      });
       window.setTimeout(() => {
-        setCopiedClipActionKey((current) =>
-          current === actionKey ? "" : current
-        );
+        updateShortsWorkspace(workspaceId, (workspace) => ({
+          copiedClipActionKey:
+            workspace.copiedClipActionKey === actionKey ? "" : workspace.copiedClipActionKey,
+        }));
       }, 1600);
     } catch {
-      setShortsError(`Failed to copy ${label.toLowerCase()}.`);
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: `Failed to copy ${label.toLowerCase()}.`,
+      });
     }
   };
 
-  const downloadSelectedShorts = async () => {
-    setShortsError("");
-    setShortsSuccess("");
+  const downloadSelectedShorts = async (workspaceId: string) => {
+    const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+    if (!workspace) return;
 
-    if (!selectedShortIds.length) {
-      setShortsError("Please select at least one short clip first.");
+    updateShortsWorkspace(workspaceId, {
+      errorMessage: "",
+      successMessage: "",
+    });
+
+    if (!workspace.selectedShortIds.length) {
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "Please select at least one short clip first.",
+      });
       return;
     }
 
     try {
-      setDownloadingShorts(true);
+      updateShortsWorkspace(workspaceId, {
+        downloadingShorts: true,
+      });
 
-      const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
+      const selectedClips = workspace.clips.filter((clip) =>
+        workspace.selectedShortIds.includes(clip.id)
+      );
       const archive = selectedClips.length > 1;
 
       if (!archive && selectedClips[0]?.downloadUrl) {
@@ -1930,7 +1839,9 @@ export default function Page() {
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        setShortsSuccess("Short download started.");
+        updateShortsWorkspace(workspaceId, {
+          successMessage: "Short download started.",
+        });
         return;
       }
 
@@ -1969,32 +1880,78 @@ export default function Page() {
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 
-      setShortsSuccess(
-        archive
+      updateShortsWorkspace(workspaceId, {
+        successMessage: archive
           ? `${selectedClips.length} short(s) were bundled into one download.`
-          : "Short download started."
-      );
+          : "Short download started.",
+      });
     } catch (err: any) {
-      setShortsError(err?.message || "Failed to download the selected shorts.");
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: err?.message || "Failed to download the selected shorts.",
+      });
     } finally {
-      setDownloadingShorts(false);
+      updateShortsWorkspace(workspaceId, {
+        downloadingShorts: false,
+      });
     }
   };
 
-  const addSelectedShortsToUploadList = async () => {
-    setShortsError("");
-    setShortsSuccess("");
-    setShortsAddedToUploads(false);
+  const clearWorkspaceHistory = useCallback(
+    (workspaceId: string) => {
+      if (!shortsHistoryStorageKey) return;
+      setShortsHistory((prev) => {
+        const next = prev.filter((entry) =>
+          (entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId) !== workspaceId
+        );
+        writeStoredJson(shortsHistoryStorageKey, next);
+        return next;
+      });
+    },
+    [shortsHistoryStorageKey]
+  );
 
-    if (!selectedShortIds.length) {
-      setShortsError("Please select at least one short clip first.");
+  const finishShortsWorkspace = useCallback(
+    (workspaceId: string) => {
+      const config =
+        SHORTS_WORKSPACE_CONFIG.find((item) => item.workspaceId === workspaceId) ||
+        SHORTS_WORKSPACE_CONFIG[0];
+      updateShortsWorkspace(workspaceId, (workspace) => ({
+        ...createInitialShortsWorkspaceState(workspaceId, config.title),
+        isCollapsed: workspace.isCollapsed,
+      }));
+      if (activeShortsMonitorRef.current[workspaceId]) {
+        delete activeShortsMonitorRef.current[workspaceId];
+      }
+      clearWorkspaceHistory(workspaceId);
+    },
+    [clearWorkspaceHistory, updateShortsWorkspace]
+  );
+
+  const addSelectedShortsToUploadList = async (workspaceId: string) => {
+    const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+    if (!workspace) return;
+
+    updateShortsWorkspace(workspaceId, {
+      errorMessage: "",
+      successMessage: "",
+      shortsAddedToUploads: false,
+    });
+
+    if (!workspace.selectedShortIds.length) {
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: "Please select at least one short clip first.",
+      });
       return;
     }
 
     try {
-      setAddingShortsToUploads(true);
+      updateShortsWorkspace(workspaceId, {
+        addingShortsToUploads: true,
+      });
 
-      const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
+      const selectedClips = workspace.clips.filter((clip) =>
+        workspace.selectedShortIds.includes(clip.id)
+      );
 
       const fetchedFiles = await Promise.all(
         selectedClips.map(async (clip, index) => {
@@ -2046,15 +2003,60 @@ export default function Page() {
         replaceGeneratedFiles(prev, fetchedFiles, /^video\d+\.mp4$/i)
       );
 
-      setShortsAddedToUploads(true);
+      const uploadedIds = [...workspace.selectedShortIds];
+      const remainingClips = workspace.clips.filter((clip) => !uploadedIds.includes(clip.id));
+
+      updateShortsWorkspace(workspaceId, (currentWorkspace) => ({
+        shortsAddedToUploads: true,
+        clips: currentWorkspace.clips.filter((clip) => !uploadedIds.includes(clip.id)),
+        selectedShortIds: [],
+        uploadedClipIds: Array.from(
+          new Set([...currentWorkspace.uploadedClipIds, ...uploadedIds])
+        ),
+        successMessage: uploadedIds.length
+          ? `${uploadedIds.length} short(s) moved to Upload files. Remaining clips stay here until you finish the workspace.`
+          : currentWorkspace.successMessage,
+      }));
       window.setTimeout(() => {
-        setShortsAddedToUploads(false);
+        updateShortsWorkspace(workspaceId, {
+          shortsAddedToUploads: false,
+        });
       }, 1600);
+
+      persistShortsHistoryEntry({
+        workspaceId,
+        jobId: workspace.jobId,
+        sourceUrl: workspace.sourceUrl,
+        mode: workspace.mode,
+        rangeStart: workspace.rangeStart,
+        rangeEnd: workspace.rangeEnd,
+        status: workspace.jobStatus,
+        progress: workspace.jobProgress,
+        clips: remainingClips,
+        selectedShortIds: [],
+        uploadedClipIds: Array.from(new Set([...(workspace.uploadedClipIds || []), ...uploadedIds])),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        successMessage: uploadedIds.length
+          ? `${uploadedIds.length} short(s) moved to Upload files. Remaining clips stay here until you finish the workspace.`
+          : workspace.successMessage,
+        errorMessage: workspace.errorMessage,
+      });
     } catch (err: any) {
-      setShortsError(err?.message || "Failed to add selected shorts to the upload list.");
+      updateShortsWorkspace(workspaceId, {
+        errorMessage: err?.message || "Failed to add selected shorts to the upload list.",
+      });
     } finally {
-      setAddingShortsToUploads(false);
+      updateShortsWorkspace(workspaceId, {
+        addingShortsToUploads: false,
+      });
     }
+  };
+
+  const toggleShortsWorkspaceCollapse = (workspaceId: string) => {
+    updateShortsWorkspace(workspaceId, (workspace) => ({
+      isCollapsed: !workspace.isCollapsed,
+    }));
   };
 
   const addGeneratedTxtsToUploadList = () => {
@@ -2079,7 +2081,7 @@ export default function Page() {
 
       const generatedTxtFiles = populatedEntries.map(
         (entry) =>
-          new File(["\uFEFF" + entry.content], entry.fileName, {
+          new File(["﻿" + entry.content], entry.fileName, {
             type: "text/plain;charset=utf-8",
             lastModified: Date.now(),
           })
@@ -2249,7 +2251,7 @@ export default function Page() {
       return;
     }
 
-    if (currentUser.username === "demo") {
+    if (currentUser.isDemo) {
       setError(
         "The demo account is view-only. Please use a real account to start automation."
       );
@@ -2422,9 +2424,8 @@ export default function Page() {
                     <span style={styles.demoKey}>Username</span>
                     <span style={styles.demoValue}>demo</span>
                   </div>
-                  <div style={styles.demoRow}>
-                    <span style={styles.demoKey}>Password</span>
-                    <span style={styles.demoValue}>123</span>
+                  <div style={styles.panelDesc}>
+                    Demo login is configured on the server side and is no longer shown in the front-end code.
                   </div>
                 </div>
               </div>
@@ -2743,364 +2744,527 @@ export default function Page() {
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Paste a Gan Jing World long-video URL to generate short clips, review
-                    the strongest options, and copy helpful titles or descriptions into
-                    your TXT writing below before adding the best shorts into the upload
-                    files list. For long videos, limit the time range first so ShortsGen
-                    can finish much faster.
+                    Use up to 3 parallel workspaces for different long-video URLs. Each
+                    workspace saves its own in-progress job, can auto-resume after refresh,
+                    and can be expanded or collapsed so the page stays manageable.
                   </div>
 
-                  <div style={styles.shortsPanel}>
-                    <div style={styles.formStack}>
-                      <div>
-                        <label style={styles.label}>Long video URL</label>
-                        <input
-                          style={styles.input}
-                          value={shortsSourceUrl}
-                          onChange={(e) => setShortsSourceUrl(e.target.value)}
-                          placeholder="Paste the long video URL here"
-                        />
-                      </div>
+                  <div style={{ display: "grid", gap: 18 }}>
+                    {shortsWorkspaces.map((workspace) => {
+                      const workspaceHistory = shortsHistory.filter(
+                        (entry) =>
+                          (entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId) ===
+                          workspace.workspaceId
+                      );
+                      const isActiveWorkspace =
+                        activeShortsWorkspaceId === workspace.workspaceId;
+                      const selectedCount = workspace.selectedShortIds.length;
+                      const rangeSummary = getShortsRangeSummary(
+                        workspace.rangeStart,
+                        workspace.rangeEnd
+                      );
 
-                      <div style={styles.formStack}>
-                        <div>
-                          <label style={styles.label}>Clipping mode</label>
-                          <div style={styles.segmentedControl}>
-                            <button
-                              type="button"
-                              style={{
-                                ...styles.segmentedButton,
-                                ...(shortsMode === "aiClipping"
-                                  ? styles.segmentedButtonActive
-                                  : null),
-                              }}
-                              onClick={() => setShortsMode("aiClipping")}
-                            >
-                              AI Clipping
-                            </button>
-                            <button
-                              type="button"
-                              style={{
-                                ...styles.segmentedButton,
-                                ...(shortsMode === "manualSelected"
-                                  ? styles.segmentedButtonActive
-                                  : null),
-                              }}
-                              onClick={() => setShortsMode("manualSelected")}
-                            >
-                              Manual Selection
-                            </button>
-                          </div>
-                          <div style={styles.helperText}>
-                            {shortsMode === "aiClipping"
-                              ? "AI Clipping finds the best shorts inside your chosen range. You can leave the range blank to scan the full video."
-                              : "Manual Selection only analyzes the exact time window you provide. This is best when you already know where the strong section is."}
-                          </div>
-                        </div>
-
-                        {shortsMode === "aiClipping" ? (
-                          <div>
-                            <label style={styles.label}>Time range</label>
-                            <div style={styles.timeframeToolbar}>
-                              <div style={styles.timeframeTitle}>Select timeframe</div>
-                              <button
-                                type="button"
-                                style={styles.timeframeReset}
-                                onClick={() => applyShortsRangePreset("", "")}
-                              >
-                                Reset
-                              </button>
-                            </div>
-                            <div style={styles.rangeFieldGrid}>
-                              <div>
-                                <input
-                                  style={styles.input}
-                                  value={shortsRangeStart}
-                                  onChange={(e) => setShortsRangeStart(e.target.value)}
-                                  placeholder="Start, e.g. 00:00"
-                                />
-                              </div>
-                              <div>
-                                <input
-                                  style={styles.input}
-                                  value={shortsRangeEnd}
-                                  onChange={(e) => setShortsRangeEnd(e.target.value)}
-                                  placeholder="End, e.g. 05:00"
-                                />
-                              </div>
-                            </div>
-                            <div style={styles.helperText}>
-                              Leave both blank to use the full video in AI Clipping mode.
-                              Current range: {shortsRangeSummary}.
-                            </div>
-                            <div style={styles.helperText}>
-                              Full video on 10+ minute sources can take 20+ minutes, and the
-                              progress bar may pause in the middle while ShortsGen scans the
-                              whole video.
-                            </div>
-                            <div style={styles.presetChipRow}>
-                              {SHORTS_RANGE_PRESETS.map((preset) => {
-                                const active =
-                                  shortsRangeStart === preset.start &&
-                                  shortsRangeEnd === preset.end;
-
-                                return (
-                                  <button
-                                    key={preset.label}
-                                    type="button"
-                                    style={{
-                                      ...styles.presetChip,
-                                      ...(active ? styles.presetChipActive : null),
-                                    }}
-                                    onClick={() =>
-                                      applyShortsRangePreset(preset.start, preset.end)
-                                    }
-                                  >
-                                    {preset.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={styles.manualSelectionCard}>
-                            <div style={styles.manualSelectionHeader}>
-                              <div style={styles.manualSelectionTitle}>
-                                Exact clip range
-                              </div>
-                              <div style={styles.manualSelectionBadge}>Required</div>
-                            </div>
-                            <div style={styles.rangeFieldGrid}>
-                              <div>
-                                <label style={styles.label}>Start time</label>
-                                <input
-                                  style={styles.input}
-                                  value={shortsRangeStart}
-                                  onChange={(e) => setShortsRangeStart(e.target.value)}
-                                  placeholder="00:00"
-                                />
-                              </div>
-                              <div>
-                                <label style={styles.label}>End time</label>
-                                <input
-                                  style={styles.input}
-                                  value={shortsRangeEnd}
-                                  onChange={(e) => setShortsRangeEnd(e.target.value)}
-                                  placeholder="05:00"
-                                />
-                              </div>
-                            </div>
-                            <div style={styles.helperText}>
-                              Manual Selection only uses this exact window. Current range:{" "}
-                              {shortsRangeSummary}.
-                            </div>
-                            <div style={styles.manualSelectionTip}>
-                              Tip: use `MM:SS` like `02:30` to `06:45` for a focused
-                              section from a long video.
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={styles.inlineActions}>
-                        <button
-                          type="button"
+                      return (
+                        <div
+                          key={workspace.workspaceId}
                           style={{
-                            ...styles.primaryButton,
-                            opacity: generatingShorts ? 0.7 : 1,
-                            cursor: generatingShorts ? "not-allowed" : "pointer",
+                            border: isActiveWorkspace
+                              ? "1px solid #f0bf84"
+                              : "1px solid #dce7f7",
+                            borderRadius: 22,
+                            background: isActiveWorkspace ? "#fffaf3" : "#f8fbff",
+                            padding: 18,
+                            display: "grid",
+                            gap: 16,
                           }}
-                          onClick={generateShorts}
-                          disabled={generatingShorts}
                         >
-                          {generatingShorts ? "Generating..." : "Generate shorts"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={styles.shortsPreviewCard}>
-                      <div style={styles.shortsPreviewHeader}>
-                        <div style={styles.actionTitle}>Preview clips</div>
-                        <div style={styles.shortsPreviewPills}>
-                          {shortsJobStatus ? (
-                            <div style={styles.statusPill}>{shortsJobStatus}</div>
-                          ) : null}
-                          {shortsJobProgress !== null ? (
-                            <div style={styles.progressPill}>{shortsJobProgress}%</div>
-                          ) : null}
-                          <div style={styles.selectionPill}>
-                            {selectedShortIds.length} selected
-                          </div>
-                        </div>
-                      </div>
-
-                      {shortsJobId ? (
-                        <div style={styles.helperText}>Job ID: {shortsJobId}</div>
-                      ) : null}
-
-                      {(shortsJobStatus === "SCHEDULED" ||
-                        shortsJobStatus === "IN_PROGRESS" ||
-                        shortsJobProgress !== null) &&
-                      shortsJobStatus !== "FAILED" ? (
-                        <div style={styles.progressCard}>
-                          <div style={styles.progressRow}>
-                            <div style={styles.progressLabel}>Generation progress</div>
-                            <div style={styles.progressValue}>
-                              {shortsJobProgress !== null ? `${shortsJobProgress}%` : "Processing"}
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 12,
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div>
+                              <div style={styles.actionTitle}>{workspace.title}</div>
+                              <div style={styles.helperText}>
+                                {workspace.jobId
+                                  ? `Current job: ${workspace.jobId}`
+                                  : "No job started yet"}
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              style={styles.secondaryButton}
+                              onClick={() => {
+                                setActiveShortsWorkspaceId(workspace.workspaceId);
+                                toggleShortsWorkspaceCollapse(workspace.workspaceId);
+                              }}
+                            >
+                              {workspace.isCollapsed ? "▸ Expand" : "▾ Collapse"}
+                            </button>
                           </div>
-                          <div style={styles.progressTrack}>
-                            {shortsJobProgress !== null ? (
-                              <div
-                                style={{
-                                  ...styles.progressFill,
-                                  width: `${shortsJobProgress}%`,
-                                }}
-                              />
-                            ) : (
-                              <div style={styles.progressFillIndeterminate} />
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
 
-                      {shortsClips.length ? (
-                        <div style={styles.shortsClipList}>
-                          {shortsClips.map((clip) => {
-                            const selected = selectedShortIds.includes(clip.id);
+                          {!workspace.isCollapsed ? (
+                            <>
+                              {workspaceHistory.length ? (
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gap: 8,
+                                    background: "#ffffff",
+                                    border: "1px solid #e3ebf7",
+                                    borderRadius: 16,
+                                    padding: 12,
+                                  }}
+                                >
+                                  <div style={styles.helperText}>
+                                    Recent history for this workspace
+                                  </div>
+                                  <div style={{ display: "grid", gap: 8 }}>
+                                    {workspaceHistory.slice(0, 5).map((entry) => (
+                                      <div
+                                        key={`${workspace.workspaceId}-${entry.jobId}`}
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          gap: 10,
+                                          alignItems: "center",
+                                          flexWrap: "wrap",
+                                        }}
+                                      >
+                                        <div style={{ minWidth: 0 }}>
+                                          <div style={{ fontSize: 13, fontWeight: 700 }}>
+                                            {entry.sourceUrl || "Untitled job"}
+                                          </div>
+                                          <div style={styles.helperText}>
+                                            {entry.status || "-"} · {formatHistoryTimestamp(entry.updatedAt)}
+                                          </div>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          style={styles.secondaryButton}
+                                          onClick={() => restoreShortsHistoryEntry(entry)}
+                                        >
+                                          Restore
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
 
-                            return (
-                              <label
-                                key={clip.id}
-                                style={{
-                                  ...styles.shortsClipCard,
-                                  borderColor: selected ? "#f29a3f" : "#d8e3f5",
-                                  background: selected ? "#fff3e6" : "#ffffff",
-                                }}
-                              >
-                                <div style={styles.shortsClipCardHeader}>
-                                  <div style={styles.shortClipCheckboxWrap}>
+                              <div style={styles.shortsPanel}>
+                                <div style={styles.formStack}>
+                                  <div>
+                                    <label style={styles.label}>Long video URL</label>
                                     <input
-                                      type="checkbox"
-                                      checked={selected}
-                                      onChange={() => toggleShortSelection(clip.id)}
+                                      style={styles.input}
+                                      value={workspace.sourceUrl}
+                                      onChange={(e) => {
+                                        setActiveShortsWorkspaceId(workspace.workspaceId);
+                                        updateShortsWorkspace(workspace.workspaceId, {
+                                          sourceUrl: e.target.value,
+                                        });
+                                      }}
+                                      placeholder="Paste the long video URL here"
                                     />
                                   </div>
-                                  <div style={styles.shortsQualityPill}>
-                                    {clip.qualityLabel}
-                                    {clip.qualityScore !== null
-                                      ? ` · ${clip.qualityScore}`
-                                      : ""}
+
+                                  <div style={styles.formStack}>
+                                    <div>
+                                      <label style={styles.label}>Clipping mode</label>
+                                      <div style={styles.segmentedControl}>
+                                        <button
+                                          type="button"
+                                          style={{
+                                            ...styles.segmentedButton,
+                                            ...(workspace.mode === "aiClipping"
+                                              ? styles.segmentedButtonActive
+                                              : null),
+                                          }}
+                                          onClick={() => {
+                                            setActiveShortsWorkspaceId(workspace.workspaceId);
+                                            updateShortsWorkspace(workspace.workspaceId, {
+                                              mode: "aiClipping",
+                                            });
+                                          }}
+                                        >
+                                          AI Clipping
+                                        </button>
+                                        <button
+                                          type="button"
+                                          style={{
+                                            ...styles.segmentedButton,
+                                            ...(workspace.mode === "manualSelected"
+                                              ? styles.segmentedButtonActive
+                                              : null),
+                                          }}
+                                          onClick={() => {
+                                            setActiveShortsWorkspaceId(workspace.workspaceId);
+                                            updateShortsWorkspace(workspace.workspaceId, {
+                                              mode: "manualSelected",
+                                            });
+                                          }}
+                                        >
+                                          Manual Selection
+                                        </button>
+                                      </div>
+                                      <div style={styles.helperText}>
+                                        {workspace.mode === "aiClipping"
+                                          ? "AI Clipping finds the best shorts inside your chosen range. You can leave the range blank to scan the full video."
+                                          : "Manual Selection only analyzes the exact time window you provide. This is best when you already know where the strong section is."}
+                                      </div>
+                                    </div>
+
+                                    {workspace.mode === "aiClipping" ? (
+                                      <div>
+                                        <label style={styles.label}>Time range</label>
+                                        <div style={styles.timeframeToolbar}>
+                                          <div style={styles.timeframeTitle}>Select timeframe</div>
+                                          <button
+                                            type="button"
+                                            style={styles.timeframeReset}
+                                            onClick={() =>
+                                              applyShortsRangePreset(workspace.workspaceId, "", "")
+                                            }
+                                          >
+                                            Reset
+                                          </button>
+                                        </div>
+                                        <div style={styles.rangeFieldGrid}>
+                                          <div>
+                                            <input
+                                              style={styles.input}
+                                              value={workspace.rangeStart}
+                                              onChange={(e) => {
+                                                setActiveShortsWorkspaceId(workspace.workspaceId);
+                                                updateShortsWorkspace(workspace.workspaceId, {
+                                                  rangeStart: e.target.value,
+                                                });
+                                              }}
+                                              placeholder="Start, e.g. 00:00"
+                                            />
+                                          </div>
+                                          <div>
+                                            <input
+                                              style={styles.input}
+                                              value={workspace.rangeEnd}
+                                              onChange={(e) => {
+                                                setActiveShortsWorkspaceId(workspace.workspaceId);
+                                                updateShortsWorkspace(workspace.workspaceId, {
+                                                  rangeEnd: e.target.value,
+                                                });
+                                              }}
+                                              placeholder="End, e.g. 05:00"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div style={styles.helperText}>
+                                          Leave both blank to use the full video in AI Clipping mode.
+                                          Current range: {rangeSummary}.
+                                        </div>
+                                        <div style={styles.helperText}>
+                                          Full video on 10+ minute sources can take much longer while
+                                          ShortsGen scans the whole video.
+                                        </div>
+                                        <div style={styles.presetChipRow}>
+                                          {SHORTS_RANGE_PRESETS.map((preset) => {
+                                            const active =
+                                              workspace.rangeStart === preset.start &&
+                                              workspace.rangeEnd === preset.end;
+
+                                            return (
+                                              <button
+                                                key={`${workspace.workspaceId}-${preset.label}`}
+                                                type="button"
+                                                style={{
+                                                  ...styles.presetChip,
+                                                  ...(active ? styles.presetChipActive : null),
+                                                }}
+                                                onClick={() =>
+                                                  applyShortsRangePreset(
+                                                    workspace.workspaceId,
+                                                    preset.start,
+                                                    preset.end
+                                                  )
+                                                }
+                                              >
+                                                {preset.label}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div style={styles.manualSelectionCard}>
+                                        <div style={styles.manualSelectionHeader}>
+                                          <div style={styles.manualSelectionTitle}>Exact clip range</div>
+                                          <div style={styles.manualSelectionBadge}>Required</div>
+                                        </div>
+                                        <div style={styles.rangeFieldGrid}>
+                                          <div>
+                                            <label style={styles.label}>Start time</label>
+                                            <input
+                                              style={styles.input}
+                                              value={workspace.rangeStart}
+                                              onChange={(e) => {
+                                                setActiveShortsWorkspaceId(workspace.workspaceId);
+                                                updateShortsWorkspace(workspace.workspaceId, {
+                                                  rangeStart: e.target.value,
+                                                });
+                                              }}
+                                              placeholder="00:00"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label style={styles.label}>End time</label>
+                                            <input
+                                              style={styles.input}
+                                              value={workspace.rangeEnd}
+                                              onChange={(e) => {
+                                                setActiveShortsWorkspaceId(workspace.workspaceId);
+                                                updateShortsWorkspace(workspace.workspaceId, {
+                                                  rangeEnd: e.target.value,
+                                                });
+                                              }}
+                                              placeholder="05:00"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div style={styles.helperText}>
+                                          Manual Selection only uses this exact window. Current range: {rangeSummary}.
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={styles.inlineActions}>
+                                    <button
+                                      type="button"
+                                      style={{
+                                        ...styles.primaryButton,
+                                        opacity: workspace.generatingShorts ? 0.7 : 1,
+                                        cursor: workspace.generatingShorts ? "not-allowed" : "pointer",
+                                      }}
+                                      onClick={() => generateShorts(workspace.workspaceId)}
+                                      disabled={workspace.generatingShorts}
+                                    >
+                                      {workspace.generatingShorts ? "Generating..." : "Generate shorts"}
+                                    </button>
                                   </div>
                                 </div>
-                                <div style={styles.shortsClipPreviewWrap}>
-                                  <video
-                                    style={styles.shortsClipPreview}
-                                    controls
-                                    preload="metadata"
-                                    playsInline
-                                    poster={clip.thumbnailUrl || undefined}
-                                  >
-                                    <source src={clip.downloadUrl} type="video/mp4" />
-                                  </video>
-                                </div>
-                                <div style={styles.shortsClipBody}>
-                                  <div style={styles.shortsClipMeta}>
-                                    #{clip.rank} · {clip.duration} · {clip.angle}
-                                  </div>
-                                  <div style={styles.shortsClipTextBlock}>
-                                    <div style={styles.shortsClipTextLabel}>Title</div>
-                                    <div style={styles.shortsClipSnippet}>{clip.title}</div>
-                                    <div style={styles.shortsClipTextLabel}>Description</div>
-                                    <div style={styles.shortsClipDescription}>
-                                      {clip.description || "No description returned by ShortsGen."}
+
+                                <div style={styles.shortsPreviewCard}>
+                                  <div style={styles.shortsPreviewHeader}>
+                                    <div style={styles.actionTitle}>Preview clips</div>
+                                    <div style={styles.shortsPreviewPills}>
+                                      {workspace.jobStatus ? (
+                                        <div style={styles.statusPill}>{workspace.jobStatus}</div>
+                                      ) : null}
+                                      {workspace.jobProgress !== null ? (
+                                        <div style={styles.progressPill}>{workspace.jobProgress}%</div>
+                                      ) : null}
+                                      <div style={styles.selectionPill}>{selectedCount} selected</div>
                                     </div>
                                   </div>
-                                  <div style={styles.shortsClipActions}>
-                                    <button
-                                      type="button"
-                                      style={styles.miniActionButton}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        void copyClipText(clip.id, clip.title, "title");
-                                      }}
-                                    >
-                                      Copy title
-                                    </button>
-                                    {copiedClipActionKey === `${clip.id}:title` ? (
-                                      <span style={styles.copiedText}>Copied</span>
-                                    ) : null}
-                                    <button
-                                      type="button"
-                                      style={styles.miniActionButton}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        void copyClipText(
-                                          clip.id,
-                                          clip.description || clip.angle,
-                                          "description"
+
+                                  {(workspace.jobStatus === "SCHEDULED" ||
+                                    workspace.jobStatus === "IN_PROGRESS" ||
+                                    workspace.jobProgress !== null) &&
+                                  workspace.jobStatus !== "FAILED" ? (
+                                    <div style={styles.progressCard}>
+                                      <div style={styles.progressRow}>
+                                        <div style={styles.progressLabel}>Generation progress</div>
+                                        <div style={styles.progressValue}>
+                                          {workspace.jobProgress !== null
+                                            ? `${workspace.jobProgress}%`
+                                            : "Processing"}
+                                        </div>
+                                      </div>
+                                      <div style={styles.progressTrack}>
+                                        {workspace.jobProgress !== null ? (
+                                          <div
+                                            style={{
+                                              ...styles.progressFill,
+                                              width: `${workspace.jobProgress}%`,
+                                            }}
+                                          />
+                                        ) : (
+                                          <div style={styles.progressFillIndeterminate} />
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {workspace.clips.length ? (
+                                    <div style={styles.shortsClipList}>
+                                      {workspace.clips.map((clip) => {
+                                        const selected = workspace.selectedShortIds.includes(clip.id);
+                                        const uploaded = workspace.uploadedClipIds.includes(clip.id);
+
+                                        return (
+                                          <label
+                                            key={`${workspace.workspaceId}-${clip.id}`}
+                                            style={{
+                                              ...styles.shortsClipCard,
+                                              borderColor: selected ? "#f29a3f" : "#d8e3f5",
+                                              background: selected ? "#fff3e6" : "#ffffff",
+                                            }}
+                                          >
+                                            <div style={styles.shortsClipCardHeader}>
+                                              <div style={styles.shortClipCheckboxWrap}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={selected}
+                                                  onChange={() =>
+                                                    toggleShortSelection(workspace.workspaceId, clip.id)
+                                                  }
+                                                />
+                                              </div>
+                                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                                {uploaded ? (
+                                                  <div style={styles.progressPill}>Uploaded</div>
+                                                ) : null}
+                                                <div style={styles.shortsQualityPill}>
+                                                  {clip.qualityLabel}
+                                                  {clip.qualityScore !== null
+                                                    ? ` · ${clip.qualityScore}`
+                                                    : ""}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <div style={styles.shortsClipPreviewWrap}>
+                                              <video
+                                                style={styles.shortsClipPreview}
+                                                controls
+                                                preload="metadata"
+                                                playsInline
+                                                poster={clip.thumbnailUrl || undefined}
+                                              >
+                                                <source src={clip.downloadUrl} type="video/mp4" />
+                                              </video>
+                                            </div>
+                                            <div style={styles.shortsClipBody}>
+                                              <div style={styles.shortsClipMeta}>
+                                                #{clip.rank} · {clip.duration} · {clip.angle}
+                                              </div>
+                                              <div style={styles.shortsClipTextBlock}>
+                                                <div style={styles.shortsClipTextLabel}>Title</div>
+                                                <div style={styles.shortsClipSnippet}>{clip.title}</div>
+                                                <div style={styles.shortsClipTextLabel}>Description</div>
+                                                <div style={styles.shortsClipDescription}>
+                                                  {clip.description || "No description returned by ShortsGen."}
+                                                </div>
+                                              </div>
+                                              <div style={styles.shortsClipActions}>
+                                                <button
+                                                  type="button"
+                                                  style={styles.miniActionButton}
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    void copyClipText(
+                                                      workspace.workspaceId,
+                                                      clip.id,
+                                                      clip.title,
+                                                      "title"
+                                                    );
+                                                  }}
+                                                >
+                                                  Copy title
+                                                </button>
+                                                {workspace.copiedClipActionKey === `${clip.id}:title` ? (
+                                                  <span style={styles.copiedText}>Copied</span>
+                                                ) : null}
+                                                <button
+                                                  type="button"
+                                                  style={styles.miniActionButton}
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    void copyClipText(
+                                                      workspace.workspaceId,
+                                                      clip.id,
+                                                      clip.description || clip.angle,
+                                                      "description"
+                                                    );
+                                                  }}
+                                                >
+                                                  Copy description
+                                                </button>
+                                                {workspace.copiedClipActionKey === `${clip.id}:description` ? (
+                                                  <span style={styles.copiedText}>Copied</span>
+                                                ) : null}
+                                              </div>
+                                            </div>
+                                          </label>
                                         );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div style={styles.shortsEmptyState}>
+                                      {workspace.generatingShorts
+                                        ? "ShortsGen is analyzing the long video and preparing clips..."
+                                        : "Generate shorts in this workspace to preview clip options, compare quality, and choose the best ones to download."}
+                                    </div>
+                                  )}
+
+                                  <div style={styles.inlineActions}>
+                                    <button
+                                      type="button"
+                                      style={{
+                                        ...styles.secondaryButton,
+                                        opacity: workspace.downloadingShorts ? 0.7 : 1,
+                                        cursor: workspace.downloadingShorts ? "not-allowed" : "pointer",
                                       }}
+                                      onClick={() => downloadSelectedShorts(workspace.workspaceId)}
+                                      disabled={workspace.downloadingShorts}
                                     >
-                                      Copy description
+                                      {workspace.downloadingShorts
+                                        ? "Preparing download..."
+                                        : "Download selected shorts"}
                                     </button>
-                                    {copiedClipActionKey === `${clip.id}:description` ? (
-                                      <span style={styles.copiedText}>Copied</span>
+                                    <button
+                                      type="button"
+                                      style={{
+                                        ...styles.primaryButton,
+                                        opacity: workspace.addingShortsToUploads ? 0.7 : 1,
+                                        cursor: workspace.addingShortsToUploads ? "not-allowed" : "pointer",
+                                      }}
+                                      onClick={() => addSelectedShortsToUploadList(workspace.workspaceId)}
+                                      disabled={workspace.addingShortsToUploads}
+                                    >
+                                      {workspace.addingShortsToUploads
+                                        ? "Adding to upload list..."
+                                        : "Add Shorts to Upload files"}
+                                    </button>
+                                    {workspace.shortsAddedToUploads ? (
+                                      <span style={styles.copiedText}>Added</span>
                                     ) : null}
                                   </div>
+
+                                  {workspace.successMessage ? (
+                                    <div style={styles.successBox}>{workspace.successMessage}</div>
+                                  ) : null}
+
+                                  {workspace.errorMessage ? (
+                                    <div style={styles.errorBox}>{workspace.errorMessage}</div>
+                                  ) : null}
                                 </div>
-                              </label>
-                            );
-                          })}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={styles.helperText}>
+                              This workspace is collapsed. Expand it to continue generating,
+                              restoring, or downloading shorts.
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div style={styles.shortsEmptyState}>
-                          {generatingShorts
-                            ? "ShortsGen is analyzing the long video and preparing clips..."
-                            : "Generate shorts to preview clip options, compare quality, and choose the best ones to download."}
-                        </div>
-                      )}
-
-                      <div style={styles.inlineActions}>
-                        <button
-                          type="button"
-                          style={{
-                            ...styles.secondaryButton,
-                            opacity: downloadingShorts ? 0.7 : 1,
-                            cursor: downloadingShorts ? "not-allowed" : "pointer",
-                          }}
-                          onClick={downloadSelectedShorts}
-                          disabled={downloadingShorts}
-                        >
-                          {downloadingShorts ? "Preparing download..." : "Download selected shorts"}
-                        </button>
-                        <button
-                          type="button"
-                          style={{
-                            ...styles.primaryButton,
-                            opacity: addingShortsToUploads ? 0.7 : 1,
-                            cursor: addingShortsToUploads ? "not-allowed" : "pointer",
-                          }}
-                          onClick={addSelectedShortsToUploadList}
-                          disabled={addingShortsToUploads}
-                        >
-                          {addingShortsToUploads
-                            ? "Adding to upload list..."
-                            : "Add Shorts to Upload files"}
-                        </button>
-                        {shortsAddedToUploads ? (
-                          <span style={styles.copiedText}>Added</span>
-                        ) : null}
-                      </div>
-
-                      {shortsSuccess ? (
-                        <div style={styles.successBox}>{shortsSuccess}</div>
-                      ) : null}
-
-                      {shortsError ? <div style={styles.errorBox}>{shortsError}</div> : null}
-                    </div>
+                      );
+                    })}
                   </div>
                 </section>
 
@@ -3119,11 +3283,11 @@ export default function Page() {
                     files list below.
                   </div>
 
-                  {selectedShortIds.length ? (
+                  {activeShortsWorkspace.selectedShortIds.length ? (
                     <div style={styles.helperBanner}>
-                      {selectedShortIds.length} short(s) selected in Step 3. Fill TXT
-                      Description 1 to {selectedShortIds.length} to match `video1` to
-                      `video{selectedShortIds.length}` in the same order, and leave the
+                      {activeShortsWorkspace.selectedShortIds.length} short(s) selected in Step 3. Fill TXT
+                      Description 1 to {activeShortsWorkspace.selectedShortIds.length} to match `video1` to
+                      `video{activeShortsWorkspace.selectedShortIds.length}` in the same order, and leave the
                       remaining boxes empty if you do not need them.
                     </div>
                   ) : null}
@@ -3274,16 +3438,16 @@ export default function Page() {
                         ...styles.primaryButton,
                         width: "100%",
                         opacity:
-                          submitting || currentUser?.username === "demo" ? 0.7 : 1,
+                          submitting || currentUser?.isDemo ? 0.7 : 1,
                         cursor:
-                          submitting || currentUser?.username === "demo"
+                          submitting || currentUser?.isDemo
                             ? "not-allowed"
                             : "pointer",
                       }}
                       onClick={submitToN8n}
-                      disabled={submitting || currentUser?.username === "demo"}
+                      disabled={submitting || currentUser?.isDemo}
                     >
-                      {currentUser?.username === "demo"
+                      {currentUser?.isDemo
                         ? "Demo account cannot start automation"
                         : submitting
                         ? "Starting..."
