@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type DemoUser = {
   password: string;
@@ -59,6 +59,22 @@ type ShortsClipOption = {
 
 type ShortsGenerationMode = "aiClipping" | "manualSelected";
 
+type SavedShortsHistoryEntry = {
+  jobId: string;
+  sourceUrl: string;
+  mode: ShortsGenerationMode;
+  rangeStart: string;
+  rangeEnd: string;
+  status: string;
+  progress: number | null;
+  clips: ShortsClipOption[];
+  selectedShortIds: string[];
+  createdAt: number;
+  updatedAt: number;
+  successMessage: string;
+  errorMessage: string;
+};
+
 const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
@@ -81,20 +97,6 @@ const WORKFLOW_STEPS = [
   "Upload the mp4 and matching txt",
   "Review the summary and start automation",
 ];
-const DEMO_X_ACCOUNTS = ["X Demo Newsdesk", "X Demo Spotlight", "X Demo Trends"];
-const DEMO_YOUTUBE_ACCOUNTS = [
-  "YouTube Demo Studio A",
-  "YouTube Demo Studio B",
-  "YouTube Demo Studio C",
-];
-const DEMO_TIKTOK_ACCOUNTS = [
-  "TikTok Demo Channel A",
-  "TikTok Demo Channel B",
-  "TikTok Demo Channel C",
-];
-const AUTH_STORAGE_KEY = "upload_ui_auth_user";
-const DEFAULT_SHORTS_RANGE_START = "00:00";
-const DEFAULT_SHORTS_RANGE_END = "05:00";
 
 const EMPTY_UTM_FIELDS: UtmBuilderFields = {
   source: "",
@@ -407,6 +409,74 @@ const sleep = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
+const SESSION_STORAGE_KEY = "ucreator-console-session";
+const buildShortsHistoryStorageKey = (username: string) =>
+  `ucreator-console-shorts-history:${username}`;
+
+const isBrowser = () => typeof window !== "undefined";
+
+const readStoredJson = <T,>(key: string, fallback: T): T => {
+  if (!isBrowser()) return fallback;
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStoredJson = (key: string, value: unknown) => {
+  if (!isBrowser()) return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore storage failures
+  }
+};
+
+const removeStoredJson = (key: string) => {
+  if (!isBrowser()) return;
+
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // ignore storage failures
+  }
+};
+
+const upsertShortsHistoryEntry = (
+  entries: SavedShortsHistoryEntry[],
+  nextEntry: SavedShortsHistoryEntry
+) => {
+  const filtered = entries.filter((item) => item.jobId !== nextEntry.jobId);
+  return [nextEntry, ...filtered]
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 5);
+};
+
+const getPollDelayMs = (attempt: number) => {
+  if (attempt < 10) return 4000;
+  if (attempt < 30) return 6000;
+  return 10000;
+};
+
+const formatHistoryTimestamp = (timestamp: number) => {
+  if (!timestamp) return "";
+
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return "";
+  }
+};
+
+const isTerminalShortsStatus = (status: string) => {
+  const normalized = status.trim().toUpperCase();
+  return normalized === "COMPLETED" || normalized === "FAILED";
+};
+
 const readResponseData = async (response: Response) => {
   const text = await response.text();
 
@@ -419,12 +489,6 @@ const readResponseData = async (response: Response) => {
 
 const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
   return `video${index + 1}.${extension}`;
-};
-
-const getShortsPollDelayMs = (attempt: number) => {
-  if (attempt < 10) return 4000;
-  if (attempt < 30) return 6000;
-  return 10000;
 };
 
 const readDownloadFileName = (contentDisposition: string | null) => {
@@ -555,7 +619,6 @@ const demoUsers: Record<string, DemoUser> = {
       "gjwpluskids",
     ],
   },
-
   hannah: {
     password: "UhgTRg@kg$253",
     folders: [
@@ -629,7 +692,6 @@ const demoUsers: Record<string, DemoUser> = {
       "freshsharing",
     ],
   },
-
   karen: {
     password: "jgGTR#kg$93",
     folders: [
@@ -703,7 +765,6 @@ const demoUsers: Record<string, DemoUser> = {
       "freshsharing",
     ],
   },
-
   joanne: {
     password: "TygMcK@kf$13",
     folders: [
@@ -777,37 +838,31 @@ const demoUsers: Record<string, DemoUser> = {
       "freshsharing",
     ],
   },
-
   ying: {
     password: "HGtYEG$eff@323",
     folders: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
     pages: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
   },
-
   ivyzhang: {
     password: "ygeTTge$eff@#24",
     folders: ["everydayvitalityzh", "healthyrhythmdaily"],
     pages: ["everydayvitalityzh", "healthyrhythmdaily"],
   },
-
   lucywang: {
     password: "GhyTge#rge@87",
     folders: ["horizonupdatesshow", "flashbrieftoday"],
     pages: ["horizonupdatesshow", "flashbrieftoday"],
   },
-
   serenak: {
     password: "UgeTHGTge@99",
     folders: ["freshsharing"],
     pages: ["freshsharing"],
   },
-
   athenam: {
     password: "RWesTjhTg23@19",
     folders: ["gjwdailybrief"],
     pages: ["gjwdailybrief"],
   },
-  
   demo: {
     password: "123",
     folders: [
@@ -834,11 +889,8 @@ export default function Page() {
   const n8nWebhookUrl =
     "https://n8n.influencerconnectagency.biz/webhook/upload-entry";
 
-  const [folderName, setFolderName] = useState("clearviewdaily");
-  const [pageName, setPageName] = useState("clearviewdaily");
-  const [xAccountName, setXAccountName] = useState("");
-  const [youtubeAccountName, setYoutubeAccountName] = useState("");
-  const [tiktokAccountName, setTiktokAccountName] = useState("");
+  const [folderName, setFolderName] = useState("");
+  const [pageName, setPageName] = useState("");
 
   const [txtDescriptions, setTxtDescriptions] = useState<string[]>(
     Array.from({ length: TXT_BOX_COUNT }, () => "")
@@ -860,8 +912,8 @@ export default function Page() {
   const [shortsSourceUrl, setShortsSourceUrl] = useState("");
   const [shortsMode, setShortsMode] =
     useState<ShortsGenerationMode>("aiClipping");
-  const [shortsRangeStart, setShortsRangeStart] = useState(DEFAULT_SHORTS_RANGE_START);
-  const [shortsRangeEnd, setShortsRangeEnd] = useState(DEFAULT_SHORTS_RANGE_END);
+  const [shortsRangeStart, setShortsRangeStart] = useState("00:00");
+  const [shortsRangeEnd, setShortsRangeEnd] = useState("05:00");
   const [shortsClips, setShortsClips] = useState<ShortsClipOption[]>([]);
   const [selectedShortIds, setSelectedShortIds] = useState<string[]>([]);
   const [generatingShorts, setGeneratingShorts] = useState(false);
@@ -876,10 +928,12 @@ export default function Page() {
   const [shortsJobId, setShortsJobId] = useState("");
   const [shortsJobStatus, setShortsJobStatus] = useState("");
   const [shortsJobProgress, setShortsJobProgress] = useState<number | null>(null);
+  const [shortsHistory, setShortsHistory] = useState<SavedShortsHistoryEntry[]>([]);
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedUtmTemplateKey, setSelectedUtmTemplateKey] = useState("");
   const [utmFields, setUtmFields] = useState<UtmBuilderFields>(EMPTY_UTM_FIELDS);
@@ -896,21 +950,6 @@ export default function Page() {
     return [...(demoUsers[currentUser.username]?.pages ?? [])].sort((a, b) =>
       a.localeCompare(b, undefined, { sensitivity: "base" })
     );
-  }, [currentUser]);
-
-  const availableXAccounts = useMemo(() => {
-    if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.xAccounts ?? DEMO_X_ACCOUNTS;
-  }, [currentUser]);
-
-  const availableYoutubeAccounts = useMemo(() => {
-    if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.youtubeAccounts ?? DEMO_YOUTUBE_ACCOUNTS;
-  }, [currentUser]);
-
-  const availableTiktokAccounts = useMemo(() => {
-    if (!currentUser) return [];
-    return demoUsers[currentUser.username]?.tiktokAccounts ?? DEMO_TIKTOK_ACCOUNTS;
   }, [currentUser]);
 
   const totalSizeMb = useMemo(() => {
@@ -963,6 +1002,50 @@ export default function Page() {
       .join("\n\n");
   }, [txtDescriptions]);
 
+  const mirroredPlatformName = pageName || "";
+  const shortsHistoryStorageKey = currentUser
+    ? buildShortsHistoryStorageKey(currentUser.username)
+    : "";
+  const activeShortsMonitorRef = useRef("");
+
+  const persistSessionState = useCallback(
+    (username: string, nextPageName: string, nextFolderName: string) => {
+      writeStoredJson(SESSION_STORAGE_KEY, {
+        username,
+        pageName: nextPageName,
+        folderName: nextFolderName,
+      });
+    },
+    []
+  );
+
+  const persistShortsHistoryEntry = useCallback(
+    (entry: SavedShortsHistoryEntry) => {
+      if (!currentUser || !shortsHistoryStorageKey) return;
+
+      setShortsHistory((prev) => {
+        const next = upsertShortsHistoryEntry(prev, entry);
+        writeStoredJson(shortsHistoryStorageKey, next);
+        return next;
+      });
+    },
+    [currentUser, shortsHistoryStorageKey]
+  );
+
+  const hydrateShortsEntry = useCallback((entry: SavedShortsHistoryEntry) => {
+    setShortsSourceUrl(entry.sourceUrl || "");
+    setShortsMode(entry.mode || "aiClipping");
+    setShortsRangeStart(entry.rangeStart || "00:00");
+    setShortsRangeEnd(entry.rangeEnd || "05:00");
+    setShortsJobId(entry.jobId || "");
+    setShortsJobStatus(entry.status || "");
+    setShortsJobProgress(typeof entry.progress === "number" ? entry.progress : null);
+    setShortsClips(Array.isArray(entry.clips) ? entry.clips : []);
+    setSelectedShortIds(Array.isArray(entry.selectedShortIds) ? entry.selectedShortIds : []);
+    setShortsSuccess(entry.successMessage || "");
+    setShortsError(entry.errorMessage || "");
+  }, []);
+
   const shortsRangeSummary = useMemo(() => {
     const startSec = parseTimecodeToSeconds(shortsRangeStart);
     const endSec = parseTimecodeToSeconds(shortsRangeEnd);
@@ -978,147 +1061,238 @@ export default function Page() {
     return "Custom range";
   }, [shortsRangeStart, shortsRangeEnd]);
 
-  useEffect(() => {
-    const loadDomains = async () => {
-      try {
-        const res = await fetch("/api/okurl-domains", {
+  const loadOkurlDomains = useCallback(async () => {
+    try {
+      const res = await fetch("/api/okurl-domains", {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      const rawDomains = Array.isArray(data?.domains)
+        ? data.domains
+        : Array.isArray(data?.data?.domains)
+        ? data.data.domains
+        : Array.isArray(data?.data)
+        ? data.data
+        : [];
+
+      const normalized: OkurlDomainOption[] = rawDomains
+        .map((item: any) => ({
+          id: pickFirstString(item?.id),
+          domain: pickFirstString(
+            item?.domain,
+            item?.name,
+            item?.host,
+            item?.new_domain
+          ),
+          pathPrefix: pickFirstString(item?.path_prefix, item?.pathPrefix, "s"),
+        }))
+        .filter((item) => item.id && item.domain);
+
+      setOkurlDomains(normalized);
+      return normalized;
+    } catch (err) {
+      console.error("Failed to load OKURL domains", err);
+      return [] as OkurlDomainOption[];
+    }
+  }, []);
+
+  const loadOkurlProjects = useCallback(async () => {
+    try {
+      setProjectsLoading(true);
+      setProjectsError("");
+
+      let fallbackDomains = okurlDomains;
+      if (!fallbackDomains.length) {
+        fallbackDomains = await loadOkurlDomains();
+      }
+
+      const matchedDomain =
+        fallbackDomains.find(
+          (item) => item.domain.trim().toLowerCase() === SHORT_LINK_DOMAIN
+        ) ?? null;
+
+      const domainQuery = matchedDomain?.id
+        ? `?domain_id=${encodeURIComponent(matchedDomain.id)}`
+        : "";
+
+      let res = await fetch(`/api/okurl-projects${domainQuery}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok && domainQuery) {
+        res = await fetch(`/api/okurl-projects`, {
           cache: "no-store",
         });
-
-        const data = await res.json();
-
-        const rawDomains = Array.isArray(data?.domains)
-          ? data.domains
-          : Array.isArray(data?.data?.domains)
-          ? data.data.domains
-          : Array.isArray(data?.data)
-          ? data.data
-          : [];
-
-        const normalized: OkurlDomainOption[] = rawDomains
-          .map((item: any) => ({
-            id: pickFirstString(item?.id),
-            domain: pickFirstString(
-              item?.domain,
-              item?.name,
-              item?.host,
-              item?.new_domain
-            ),
-            pathPrefix: pickFirstString(item?.path_prefix, item?.pathPrefix, "s"),
-          }))
-          .filter((item) => item.id && item.domain);
-
-        setOkurlDomains(normalized);
-      } catch (err) {
-        console.error("Failed to load OKURL domains", err);
       }
-    };
 
-    loadDomains();
+      const data = await res.json();
+      let templateData: any = null;
+
+      try {
+        const templateQuery = matchedDomain?.id
+          ? `?domain_id=${encodeURIComponent(matchedDomain.id)}`
+          : "";
+        let templateRes = await fetch(
+          `/api/okurl-utm-templates${templateQuery}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        if (!templateRes.ok && templateQuery) {
+          templateRes = await fetch(`/api/okurl-utm-templates`, {
+            cache: "no-store",
+          });
+        }
+
+        if (templateRes.ok) {
+          templateData = await templateRes.json();
+        }
+      } catch (templateErr) {
+        console.warn("Failed to load OKURL UTM templates", templateErr);
+      }
+
+      const rawProjects = Array.isArray(data?.projects)
+        ? data.projects
+        : Array.isArray(data?.data?.projects)
+        ? data.data.projects
+        : Array.isArray(data?.data)
+        ? data.data
+        : [];
+
+      const embeddedTemplates = Array.isArray(data?.templates)
+        ? data.templates
+        : Array.isArray(data?.data?.templates)
+        ? data.data.templates
+        : [];
+
+      const fetchedTemplates = Array.isArray(templateData?.templates)
+        ? templateData.templates
+        : Array.isArray(templateData?.data?.templates)
+        ? templateData.data.templates
+        : Array.isArray(templateData?.data)
+        ? templateData.data
+        : [];
+
+      const rawTemplateById = new Map<string, any>();
+
+      [...embeddedTemplates, ...fetchedTemplates].forEach((item: any) => {
+        const templateId = pickFirstString(item?.id);
+        if (templateId) {
+          rawTemplateById.set(templateId, item);
+        }
+      });
+
+      const normalized: OkurlProjectOption[] = rawProjects
+        .map((item: any) => {
+          const projectName = String(item?.name || "").trim();
+          const utmTemplateId = pickFirstString(
+            item?.utm_tpl_id,
+            item?.utmTemplateId,
+            item?.utm_template_id
+          );
+          const linkedTemplate =
+            (utmTemplateId && rawTemplateById.get(utmTemplateId)) || null;
+
+          return {
+            id: Number(item?.id),
+            name: projectName,
+            domainId: pickFirstString(
+              item?.domain_id,
+              item?.domainId,
+              item?.domain?.id
+            ),
+            utmTemplateId,
+            utmTemplates: linkedTemplate
+              ? [normalizeTemplateOption(projectName, linkedTemplate, 0)]
+              : extractUtmTemplates(projectName, item),
+          };
+        })
+        .filter((item) => item.id && item.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setOkurlProjects(normalized);
+
+      if (!normalized.length) {
+        setProjectsError("No projects loaded.");
+      }
+    } catch (err) {
+      console.error("Failed to load OKURL projects", err);
+      setOkurlProjects([]);
+      setProjectsError("Failed to load projects.");
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, [loadOkurlDomains, okurlDomains]);
+
+  useEffect(() => {
+    loadOkurlDomains();
+  }, [loadOkurlDomains]);
+
+  useEffect(() => {
+    loadOkurlProjects();
+  }, [loadOkurlProjects]);
+
+  useEffect(() => {
+    const savedSession = readStoredJson<{
+      username?: string;
+      pageName?: string;
+      folderName?: string;
+    } | null>(SESSION_STORAGE_KEY, null);
+
+    if (!savedSession?.username) return;
+
+    const user = demoUsers[savedSession.username];
+    if (!user) return;
+
+    const sortedPages = [...user.pages].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    );
+    const restoredPage =
+      (savedSession.pageName && user.pages.includes(savedSession.pageName)
+        ? savedSession.pageName
+        : sortedPages[0]) || "";
+    const restoredFolder =
+      (savedSession.folderName && user.folders.includes(savedSession.folderName)
+        ? savedSession.folderName
+        : user.folders.find(
+            (folder) =>
+              folder.trim().toLowerCase() === restoredPage.trim().toLowerCase()
+          )) ||
+      user.folders[0] ||
+      restoredPage;
+
+    setCurrentUser({ username: savedSession.username });
+    setLoginUsername(savedSession.username);
+    setFolderName(restoredFolder);
+    setPageName(restoredPage);
   }, []);
 
   useEffect(() => {
-    if (!selectedDomain?.id) return;
+    if (!currentUser) {
+      setShortsHistory([]);
+      return;
+    }
 
-    const loadProjects = async () => {
-      try {
-        setProjectsLoading(true);
-        const domainQuery = selectedDomain?.id
-          ? `?domain_id=${encodeURIComponent(selectedDomain.id)}`
-          : "";
-        const res = await fetch(`/api/okurl-projects${domainQuery}`, {
-          cache: "no-store",
-        });
-        const data = await res.json();
-        let templateData: any = null;
+    const storedHistory = readStoredJson<SavedShortsHistoryEntry[]>(
+      buildShortsHistoryStorageKey(currentUser.username),
+      []
+    );
 
-        try {
-          const templateQuery = selectedDomain?.id
-            ? `?domain_id=${encodeURIComponent(selectedDomain.id)}`
-            : "";
-          const templateRes = await fetch(
-            `/api/okurl-utm-templates${templateQuery}`,
-            {
-              cache: "no-store",
-            }
-          );
+    setShortsHistory(storedHistory);
 
-          if (templateRes.ok) {
-            templateData = await templateRes.json();
-          }
-        } catch (templateErr) {
-          console.warn("Failed to load OKURL UTM templates", templateErr);
-        }
+    const latestEntry = storedHistory[0];
+    if (latestEntry) {
+      hydrateShortsEntry(latestEntry);
+    }
+  }, [currentUser, hydrateShortsEntry]);
 
-        const rawProjects = Array.isArray(data?.projects)
-          ? data.projects
-          : Array.isArray(data?.data?.projects)
-          ? data.data.projects
-          : Array.isArray(data?.data)
-          ? data.data
-          : [];
-
-        const embeddedTemplates = Array.isArray(data?.templates)
-          ? data.templates
-          : Array.isArray(data?.data?.templates)
-          ? data.data.templates
-          : [];
-
-        const fetchedTemplates = Array.isArray(templateData?.templates)
-          ? templateData.templates
-          : Array.isArray(templateData?.data?.templates)
-          ? templateData.data.templates
-          : Array.isArray(templateData?.data)
-          ? templateData.data
-          : [];
-
-        const rawTemplateById = new Map<string, any>();
-
-        [...embeddedTemplates, ...fetchedTemplates].forEach((item: any) => {
-          const templateId = pickFirstString(item?.id);
-          if (templateId) {
-            rawTemplateById.set(templateId, item);
-          }
-        });
-
-        const normalized: OkurlProjectOption[] = rawProjects
-          .map((item: any) => {
-            const projectName = String(item?.name || "").trim();
-            const utmTemplateId = pickFirstString(
-              item?.utm_tpl_id,
-              item?.utmTemplateId,
-              item?.utm_template_id
-            );
-            const linkedTemplate =
-              (utmTemplateId && rawTemplateById.get(utmTemplateId)) || null;
-
-            return {
-              id: Number(item?.id),
-              name: projectName,
-              domainId: pickFirstString(
-                item?.domain_id,
-                item?.domainId,
-                item?.domain?.id
-              ),
-              utmTemplateId,
-              utmTemplates: linkedTemplate
-                ? [normalizeTemplateOption(projectName, linkedTemplate, 0)]
-                : extractUtmTemplates(projectName, item),
-            };
-          })
-          .filter((item) => item.id && item.name)
-          .sort((a, b) => a.name.localeCompare(b.name));
-
-        setOkurlProjects(normalized);
-      } catch (err) {
-        console.error("Failed to load OKURL projects", err);
-      } finally {
-        setProjectsLoading(false);
-      }
-    };
-
-    loadProjects();
-  }, [selectedDomain?.id]);
+  useEffect(() => {
+    if (!currentUser) return;
+    persistSessionState(currentUser.username, pageName, folderName || pageName);
+  }, [currentUser, folderName, pageName, persistSessionState]);
 
   useEffect(() => {
     if (!pageName || !okurlProjects.length) return;
@@ -1151,44 +1325,6 @@ export default function Page() {
     setUtmFields(firstTemplate.fields);
   }, [selectedProject]);
 
-  const initializeSessionForUser = (username: string) => {
-    const user = demoUsers[username];
-    if (!user) return;
-
-    const firstPage =
-      [...user.pages].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: "base" })
-      )[0] ?? "";
-    const firstFolder =
-      user.folders.find(
-        (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
-      ) ??
-      user.folders[0] ??
-      firstPage;
-
-    setCurrentUser({ username });
-    setFolderName(firstFolder);
-    setPageName(firstPage);
-    setXAccountName("");
-    setYoutubeAccountName("");
-    setTiktokAccountName("");
-    setLoginUsername(username);
-    setLoginPassword("");
-  };
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const savedUsername = window.localStorage
-      .getItem(AUTH_STORAGE_KEY)
-      ?.trim()
-      .toLowerCase();
-
-    if (!savedUsername || !demoUsers[savedUsername]) return;
-
-    initializeSessionForUser(savedUsername);
-  }, []);
-
   const resetUploadForm = () => {
     setFiles([]);
     setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
@@ -1201,8 +1337,8 @@ export default function Page() {
     setShortUrlCopied(false);
     setShortsSourceUrl("");
     setShortsMode("aiClipping");
-    setShortsRangeStart(DEFAULT_SHORTS_RANGE_START);
-    setShortsRangeEnd(DEFAULT_SHORTS_RANGE_END);
+    setShortsRangeStart("00:00");
+    setShortsRangeEnd("05:00");
     setShortsClips([]);
     setSelectedShortIds([]);
     setShortsSuccess("");
@@ -1235,21 +1371,29 @@ export default function Page() {
       return;
     }
 
-    initializeSessionForUser(username);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, username);
-    }
+    const firstPage = [...user.pages].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    )[0] ?? "";
+    const firstFolder =
+      user.folders.find(
+        (folder) => folder.trim().toLowerCase() === firstPage.trim().toLowerCase()
+      ) ??
+      user.folders[0] ??
+      firstPage;
+    setCurrentUser({ username });
+    setFolderName(firstFolder);
+    setPageName(firstPage);
+    persistSessionState(username, firstPage, firstFolder);
     setSignUpWallEnabled(false);
     setShortUrlCopied(false);
     setCopiedClipActionKey("");
     setShortsAddedToUploads(false);
     setTxtsAddedToUploads(false);
+    setLoginPassword("");
   };
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
+    removeStoredJson(SESSION_STORAGE_KEY);
     setCurrentUser(null);
     setLoginUsername("");
     setLoginPassword("");
@@ -1270,8 +1414,8 @@ export default function Page() {
     setUtmFields(EMPTY_UTM_FIELDS);
     setShortsSourceUrl("");
     setShortsMode("aiClipping");
-    setShortsRangeStart(DEFAULT_SHORTS_RANGE_START);
-    setShortsRangeEnd(DEFAULT_SHORTS_RANGE_END);
+    setShortsRangeStart("00:00");
+    setShortsRangeEnd("05:00");
     setShortsClips([]);
     setSelectedShortIds([]);
     setShortsSuccess("");
@@ -1284,9 +1428,7 @@ export default function Page() {
     setAddingTxtsToUploads(false);
     setShortsAddedToUploads(false);
     setTxtsAddedToUploads(false);
-    setXAccountName("");
-    setYoutubeAccountName("");
-    setTiktokAccountName("");
+    setShortsHistory([]);
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -1327,6 +1469,10 @@ export default function Page() {
         (folder) => folder.trim().toLowerCase() === value.trim().toLowerCase()
       ) ?? value;
     setFolderName(linkedFolder);
+
+    if (currentUser) {
+      persistSessionState(currentUser.username, value, linkedFolder);
+    }
   };
 
   const handleUtmTemplateChange = (templateKey: string) => {
@@ -1355,6 +1501,245 @@ export default function Page() {
     setShortsRangeEnd(end);
   };
 
+  const fetchShortsResultsForJob = useCallback(async (jobId: string) => {
+    let clips: ShortsClipOption[] = [];
+    let lastResultsError = "";
+
+    for (
+      let resultsAttempt = 0;
+      resultsAttempt < SHORTSGEN_RESULTS_MAX_RETRIES;
+      resultsAttempt += 1
+    ) {
+      const resultsRes = await fetch(
+        `/api/shortsgen/jobs/${encodeURIComponent(jobId)}/results`,
+        {
+          cache: "no-store",
+        }
+      );
+      const resultsData = await readResponseData(resultsRes);
+
+      if (!resultsRes.ok) {
+        throw new Error(
+          resultsData?.error ||
+            resultsData?.message ||
+            "Failed to load the generated shorts."
+        );
+      }
+
+      clips = Array.isArray(resultsData?.clips) ? resultsData.clips : [];
+
+      if (clips.length) {
+        return clips;
+      }
+
+      lastResultsError =
+        resultsData?.error ||
+        resultsData?.message ||
+        "ShortsGen completed, but no clips were returned.";
+
+      if (resultsAttempt < SHORTSGEN_RESULTS_MAX_RETRIES - 1) {
+        await sleep(SHORTSGEN_RESULTS_RETRY_DELAY_MS);
+      }
+    }
+
+    throw new Error(lastResultsError || "ShortsGen completed, but no clips were returned.");
+  }, []);
+
+  const monitorShortsJob = useCallback(
+    async ({
+      jobId,
+      sourceUrl,
+      mode,
+      rangeStart,
+      rangeEnd,
+      createdAt,
+    }: {
+      jobId: string;
+      sourceUrl: string;
+      mode: ShortsGenerationMode;
+      rangeStart: string;
+      rangeEnd: string;
+      createdAt: number;
+    }) => {
+      if (!jobId) return;
+      if (activeShortsMonitorRef.current === jobId) return;
+
+      activeShortsMonitorRef.current = jobId;
+      const startSec = parseTimecodeToSeconds(rangeStart);
+      const endSec = parseTimecodeToSeconds(rangeEnd);
+      const hasRangeInput = Boolean(rangeStart.trim()) || Boolean(rangeEnd.trim());
+      const isFullVideoAiClipping = mode === "aiClipping" && !hasRangeInput;
+      const maxPollAttempts = isFullVideoAiClipping
+        ? SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS
+        : SHORTSGEN_MAX_POLL_ATTEMPTS;
+
+      try {
+        setGeneratingShorts(true);
+        let finalStatus = "";
+
+        for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
+          const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
+            cache: "no-store",
+          });
+          const statusData = await readResponseData(statusRes);
+
+          if (!statusRes.ok) {
+            throw new Error(
+              statusData?.error ||
+                statusData?.message ||
+                "Failed to check ShortsGen job status."
+            );
+          }
+
+          finalStatus = pickFirstString(statusData?.status).toUpperCase();
+          setShortsJobId(jobId);
+          setShortsJobStatus(finalStatus);
+          const explicitProgressRaw =
+            typeof statusData?.progress === "number" ||
+            typeof statusData?.progress === "string"
+              ? Number(statusData.progress)
+              : null;
+          const explicitProgress =
+            explicitProgressRaw !== null && Number.isFinite(explicitProgressRaw)
+              ? Math.max(0, Math.min(100, Math.round(explicitProgressRaw)))
+              : null;
+          setShortsJobProgress(explicitProgress);
+
+          persistShortsHistoryEntry({
+            jobId,
+            sourceUrl,
+            mode,
+            rangeStart,
+            rangeEnd,
+            status: finalStatus || "IN_PROGRESS",
+            progress: explicitProgress,
+            clips: [],
+            selectedShortIds: [],
+            createdAt,
+            updatedAt: Date.now(),
+            successMessage: "",
+            errorMessage: "",
+          });
+
+          if (finalStatus === "COMPLETED") {
+            setShortsJobProgress(100);
+            break;
+          }
+
+          if (finalStatus === "FAILED") {
+            throw new Error(
+              statusData?.error ||
+                statusData?.message ||
+                statusData?.upstream?.message ||
+                "Shorts generation failed."
+            );
+          }
+
+          await sleep(getPollDelayMs(attempt));
+        }
+
+        if (finalStatus !== "COMPLETED") {
+          throw new Error(
+            isFullVideoAiClipping
+              ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs around 10+ minutes can pause at mid-progress for a long time. Please wait a bit longer and try again, or use First 2 min / First 3 min / First 5 min for much faster results."
+              : "ShortsGen is still processing this job. Please wait a little longer and try again."
+          );
+        }
+
+        const clips = await fetchShortsResultsForJob(jobId);
+        const preselectedIds = clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id);
+
+        setShortsClips(clips.slice(0, Math.min(2, clips.length)));
+        window.setTimeout(() => {
+          setShortsClips(clips);
+          setSelectedShortIds(preselectedIds);
+        }, 120);
+        setShortsJobProgress(100);
+        setShortsSuccess(
+          `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`
+        );
+        setShortsError("");
+
+        persistShortsHistoryEntry({
+          jobId,
+          sourceUrl,
+          mode,
+          rangeStart,
+          rangeEnd,
+          status: "COMPLETED",
+          progress: 100,
+          clips,
+          selectedShortIds: preselectedIds,
+          createdAt,
+          updatedAt: Date.now(),
+          successMessage:
+            `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`,
+          errorMessage: "",
+        });
+      } catch (err: any) {
+        const message = err?.message || "Failed to prepare the shorts preview.";
+        setShortsError(message);
+
+        persistShortsHistoryEntry({
+          jobId,
+          sourceUrl,
+          mode,
+          rangeStart,
+          rangeEnd,
+          status: shortsJobStatus || "FAILED",
+          progress: shortsJobProgress,
+          clips: [],
+          selectedShortIds: [],
+          createdAt,
+          updatedAt: Date.now(),
+          successMessage: "",
+          errorMessage: message,
+        });
+      } finally {
+        if (activeShortsMonitorRef.current === jobId) {
+          activeShortsMonitorRef.current = "";
+        }
+        setGeneratingShorts(false);
+      }
+    },
+    [fetchShortsResultsForJob, persistShortsHistoryEntry, shortsJobProgress, shortsJobStatus]
+  );
+
+  useEffect(() => {
+    if (!currentUser || !shortsHistory.length) return;
+
+    const latestEntry = shortsHistory[0];
+    if (!latestEntry) return;
+
+    hydrateShortsEntry(latestEntry);
+
+    if (!isTerminalShortsStatus(latestEntry.status) && latestEntry.jobId) {
+      monitorShortsJob({
+        jobId: latestEntry.jobId,
+        sourceUrl: latestEntry.sourceUrl,
+        mode: latestEntry.mode,
+        rangeStart: latestEntry.rangeStart,
+        rangeEnd: latestEntry.rangeEnd,
+        createdAt: latestEntry.createdAt || Date.now(),
+      });
+    }
+  }, [currentUser, hydrateShortsEntry, monitorShortsJob, shortsHistory]);
+
+  const restoreShortsHistoryEntry = (entry: SavedShortsHistoryEntry) => {
+    hydrateShortsEntry(entry);
+
+    if (!isTerminalShortsStatus(entry.status) && entry.jobId) {
+      monitorShortsJob({
+        jobId: entry.jobId,
+        sourceUrl: entry.sourceUrl,
+        mode: entry.mode,
+        rangeStart: entry.rangeStart,
+        rangeEnd: entry.rangeEnd,
+        createdAt: entry.createdAt || Date.now(),
+      });
+    }
+  };
+
   const generateShorts = async () => {
     setShortsError("");
     setShortsSuccess("");
@@ -1368,11 +1753,6 @@ export default function Page() {
     const endSec = parseTimecodeToSeconds(shortsRangeEnd);
     const hasRangeInput =
       Boolean(shortsRangeStart.trim()) || Boolean(shortsRangeEnd.trim());
-    const isFullVideoAiClipping =
-      shortsMode === "aiClipping" && !hasRangeInput;
-    const maxPollAttempts = isFullVideoAiClipping
-      ? SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS
-      : SHORTSGEN_MAX_POLL_ATTEMPTS;
 
     if (hasRangeInput && (startSec === null || endSec === null)) {
       setShortsError("Please enter a valid start and end time like 00:00 or 05:30.");
@@ -1457,117 +1837,37 @@ export default function Page() {
         throw new Error("ShortsGen did not return a job ID.");
       }
 
+      const createdAt = Date.now();
       setShortsJobId(jobId);
       setShortsJobStatus("SCHEDULED");
       setShortsJobProgress(0);
 
-      let finalStatus = "";
+      persistShortsHistoryEntry({
+        jobId,
+        sourceUrl: shortsSourceUrl.trim(),
+        mode: shortsMode,
+        rangeStart: shortsRangeStart,
+        rangeEnd: shortsRangeEnd,
+        status: "SCHEDULED",
+        progress: 0,
+        clips: [],
+        selectedShortIds: [],
+        createdAt,
+        updatedAt: createdAt,
+        successMessage: "",
+        errorMessage: "",
+      });
 
-      for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
-        const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
-          cache: "no-store",
-        });
-        const statusData = await readResponseData(statusRes);
-
-        if (!statusRes.ok) {
-          throw new Error(
-            statusData?.error ||
-              statusData?.message ||
-              "Failed to check ShortsGen job status."
-          );
-        }
-
-        finalStatus = pickFirstString(statusData?.status).toUpperCase();
-        setShortsJobStatus(finalStatus);
-        const explicitProgressRaw =
-          typeof statusData?.progress === "number" ||
-          typeof statusData?.progress === "string"
-            ? Number(statusData.progress)
-            : null;
-        const explicitProgress =
-          explicitProgressRaw !== null && Number.isFinite(explicitProgressRaw)
-            ? Math.max(0, Math.min(100, Math.round(explicitProgressRaw)))
-            : null;
-        setShortsJobProgress(explicitProgress);
-
-        if (finalStatus === "COMPLETED") {
-          setShortsJobProgress(100);
-          break;
-        }
-
-        if (finalStatus === "FAILED") {
-          throw new Error(
-            statusData?.error ||
-              statusData?.message ||
-              statusData?.upstream?.message ||
-              "Shorts generation failed."
-          );
-        }
-
-        await sleep(getShortsPollDelayMs(attempt));
-      }
-
-      if (finalStatus !== "COMPLETED") {
-        throw new Error(
-          isFullVideoAiClipping
-            ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs around 10+ minutes can pause at mid-progress for a long time. Please wait a bit longer and try again, or use First 2 min / First 3 min / First 5 min for much faster results."
-            : "ShortsGen is still processing this job. Please wait a little longer and try again."
-        );
-      }
-
-      let clips: ShortsClipOption[] = [];
-      let lastResultsError = "";
-
-      for (
-        let resultsAttempt = 0;
-        resultsAttempt < SHORTSGEN_RESULTS_MAX_RETRIES;
-        resultsAttempt += 1
-      ) {
-        const resultsRes = await fetch(
-          `/api/shortsgen/jobs/${encodeURIComponent(jobId)}/results`,
-          {
-            cache: "no-store",
-          }
-        );
-        const resultsData = await readResponseData(resultsRes);
-
-        if (!resultsRes.ok) {
-          throw new Error(
-            resultsData?.error ||
-              resultsData?.message ||
-              "Failed to load the generated shorts."
-          );
-        }
-
-        clips = Array.isArray(resultsData?.clips) ? resultsData.clips : [];
-
-        if (clips.length) {
-          break;
-        }
-
-        lastResultsError =
-          resultsData?.error ||
-          resultsData?.message ||
-          "ShortsGen completed, but no clips were returned.";
-
-        if (resultsAttempt < SHORTSGEN_RESULTS_MAX_RETRIES - 1) {
-          await sleep(SHORTSGEN_RESULTS_RETRY_DELAY_MS);
-        }
-      }
-
-      if (!clips.length) {
-        throw new Error(lastResultsError || "ShortsGen completed, but no clips were returned.");
-      }
-
-      setShortsClips(clips);
-      setSelectedShortIds(clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id));
-      setShortsJobProgress(100);
-      setShortsSuccess(
-        `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`
-      );
+      await monitorShortsJob({
+        jobId,
+        sourceUrl: shortsSourceUrl.trim(),
+        mode: shortsMode,
+        rangeStart: shortsRangeStart,
+        rangeEnd: shortsRangeEnd,
+        createdAt,
+      });
     } catch (err: any) {
       setShortsError(err?.message || "Failed to prepare the shorts preview.");
-    } finally {
       setGeneratingShorts(false);
     }
   };
@@ -1621,6 +1921,18 @@ export default function Page() {
 
       const selectedClips = shortsClips.filter((clip) => selectedShortIds.includes(clip.id));
       const archive = selectedClips.length > 1;
+
+      if (!archive && selectedClips[0]?.downloadUrl) {
+        const anchor = document.createElement("a");
+        anchor.href = selectedClips[0].downloadUrl;
+        anchor.target = "_blank";
+        anchor.rel = "noopener noreferrer";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setShortsSuccess("Short download started.");
+        return;
+      }
 
       const res = await fetch("/api/shortsgen/download", {
         method: "POST",
@@ -1686,26 +1998,41 @@ export default function Page() {
 
       const fetchedFiles = await Promise.all(
         selectedClips.map(async (clip, index) => {
-          const res = await fetch("/api/shortsgen/download", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              url: clip.downloadUrl,
-            }),
-          });
+          let blob: Blob | null = null;
 
-          if (!res.ok) {
-            const data = await readResponseData(res);
-            throw new Error(
-              data?.error ||
-                data?.message ||
-                `Failed to prepare ${clip.title} for upload.`
-            );
+          try {
+            const directRes = await fetch(clip.downloadUrl, {
+              cache: "force-cache",
+            });
+            if (directRes.ok) {
+              blob = await directRes.blob();
+            }
+          } catch {
+            blob = null;
           }
 
-          const blob = await res.blob();
+          if (!blob) {
+            const res = await fetch("/api/shortsgen/download", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                url: clip.downloadUrl,
+              }),
+            });
+
+            if (!res.ok) {
+              const data = await readResponseData(res);
+              throw new Error(
+                data?.error ||
+                  data?.message ||
+                  `Failed to prepare ${clip.title} for upload.`
+              );
+            }
+
+            blob = await res.blob();
+          }
           const fileName = buildSequentialFileName(index, "mp4");
 
           return new File([blob], fileName, {
@@ -2048,7 +2375,6 @@ export default function Page() {
         <div style={styles.mainArea}>
           <div style={styles.topbar}>
             <div>
-              <div style={styles.badge}>Admin Workspace</div>
               <h1 style={styles.title}>Content Upload Dashboard</h1>
             </div>
           </div>
@@ -2136,69 +2462,35 @@ export default function Page() {
 
                     <div>
                       <label style={styles.label}>X Account</label>
-                      <select
-                        style={styles.select}
-                        value={xAccountName}
-                        onChange={(e) => setXAccountName(e.target.value)}
-                      >
-                        <option value="">Not selected (Demo only)</option>
-                        {availableXAccounts.length ? (
-                          availableXAccounts.map((account) => (
-                            <option key={account} value={account}>
-                              {account}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="">No X account available</option>
-                        )}
-                      </select>
+                      <input
+                        style={styles.inputReadonly}
+                        value={mirroredPlatformName || "Choose FB first"}
+                        readOnly
+                      />
                     </div>
 
                     <div>
                       <label style={styles.label}>YouTube Account</label>
-                      <select
-                        style={styles.select}
-                        value={youtubeAccountName}
-                        onChange={(e) => setYoutubeAccountName(e.target.value)}
-                      >
-                        <option value="">Not selected (Demo only)</option>
-                        {availableYoutubeAccounts.length ? (
-                          availableYoutubeAccounts.map((account) => (
-                            <option key={account} value={account}>
-                              {account}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="">No YouTube account available</option>
-                        )}
-                      </select>
+                      <input
+                        style={styles.inputReadonly}
+                        value={mirroredPlatformName || "Choose FB first"}
+                        readOnly
+                      />
                     </div>
 
                     <div>
                       <label style={styles.label}>TikTok Account</label>
-                      <select
-                        style={styles.select}
-                        value={tiktokAccountName}
-                        onChange={(e) => setTiktokAccountName(e.target.value)}
-                      >
-                        <option value="">Not selected (Demo only)</option>
-                        {availableTiktokAccounts.length ? (
-                          availableTiktokAccounts.map((account) => (
-                            <option key={account} value={account}>
-                              {account}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="">No TikTok account available</option>
-                        )}
-                      </select>
+                      <input
+                        style={styles.inputReadonly}
+                        value={mirroredPlatformName || "Choose FB first"}
+                        readOnly
+                      />
                     </div>
                   </div>
 
                   <div style={styles.helperText}>
                     Facebook Page is the only platform currently connected to automation.
-                    X, YouTube, and TikTok are optional demo fields and will not affect Start
-                    automation if you leave them unselected.
+                    X, YouTube, and TikTok now mirror the Facebook Page name automatically.
                   </div>
                 </section>
 
@@ -2229,23 +2521,38 @@ export default function Page() {
 
                       <div>
                         <label style={styles.label}>Project</label>
-                        <select
-                          style={styles.select}
-                          value={selectedProjectId}
-                          onChange={(e) => setSelectedProjectId(e.target.value)}
-                        >
-                          <option value="">
-                            {projectsLoading ? "Loading projects..." : "Choose project"}
-                          </option>
-                          {okurlProjects.map((project) => (
-                            <option key={project.id} value={String(project.id)}>
-                              {project.name}
+                        <div style={styles.shortUrlRow}>
+                          <select
+                            style={{ ...styles.select, flex: 1 }}
+                            value={selectedProjectId}
+                            onChange={(e) => setSelectedProjectId(e.target.value)}
+                          >
+                            <option value="">
+                              {projectsLoading ? "Loading projects..." : "Choose project"}
                             </option>
-                          ))}
-                        </select>
+                            {okurlProjects.map((project) => (
+                              <option key={project.id} value={String(project.id)}>
+                                {project.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            style={styles.secondaryButton}
+                            onClick={loadOkurlProjects}
+                            disabled={projectsLoading}
+                          >
+                            Reload
+                          </button>
+                        </div>
                         <div style={styles.helperText}>
                           Domain: {selectedDomain?.domain || SHORT_LINK_DOMAIN}
                         </div>
+                        {projectsError ? (
+                          <div style={{ ...styles.helperText, color: "#b5463c" }}>
+                            {projectsError}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div>
@@ -2527,7 +2834,7 @@ export default function Page() {
                               Current range: {shortsRangeSummary}.
                             </div>
                             <div style={styles.helperText}>
-                              Full video on 10+ minute sources can take 40+ minutes, and the
+                              Full video on 10+ minute sources can take 20+ minutes, and the
                               progress bar may pause in the middle while ShortsGen scans the
                               whole video.
                             </div>
@@ -2940,15 +3247,15 @@ export default function Page() {
                     </div>
                     <div style={styles.summaryRow}>
                       <span>X Account</span>
-                      <strong>{xAccountName || "-"}</strong>
+                      <strong>{mirroredPlatformName || "Choose FB first"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>YouTube Account</span>
-                      <strong>{youtubeAccountName || "-"}</strong>
+                      <strong>{mirroredPlatformName || "Choose FB first"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>TikTok Account</span>
-                      <strong>{tiktokAccountName || "-"}</strong>
+                      <strong>{mirroredPlatformName || "Choose FB first"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
                       <span>Files</span>
