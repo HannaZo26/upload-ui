@@ -2270,6 +2270,7 @@ export default function Page() {
       setFiles((prev) => appendGeneratedFiles(prev, generatedTxtFiles, "txt"));
 
       updateShortsWorkspace(workspaceId, {
+        txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
         txtsAddedToUploads: true,
       });
       window.setTimeout(() => {
@@ -3306,6 +3307,57 @@ export default function Page() {
                                     >
                                       {workspace.generatingShorts ? "Generating..." : "Generate shorts"}
                                     </button>
+                                  </div>
+
+                                  <div style={styles.workspaceTxtSection}>
+                                    <div style={styles.workspaceTxtHeaderRow}>
+                                      <div>
+                                        <div style={styles.actionTitle}>{tx("TXT generator", "文本生成器")}</div>
+                                        <div style={styles.helperText}>
+                                          {tx(
+                                            "Copy or edit title and description here, then add them to Upload files.",
+                                            "可在這裡複製或編輯標題與描述，之後再加入上傳文件。"
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div style={styles.workspaceTxtGrid}>
+                                      {workspace.txtDescriptions.map((value, index) => (
+                                        <div key={`${workspace.workspaceId}-txt-${index}`} style={styles.workspaceTxtCard}>
+                                          <label style={styles.label}>{tx(`TXT Description ${index + 1}`, `文本描述 ${index + 1}`)}</label>
+                                          <textarea
+                                            style={styles.workspaceTxtTextarea}
+                                            value={value}
+                                            onChange={(e) => updateTxtDescription(workspace.workspaceId, index, e.target.value)}
+                                            placeholder={tx(
+                                              "Paste or edit title and description here",
+                                              "在此貼上或編輯標題與描述"
+                                            )}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    <div style={styles.inlineActions}>
+                                      <button
+                                        type="button"
+                                        style={{
+                                          ...styles.primaryButton,
+                                          opacity: workspace.addingTxtsToUploads ? 0.7 : 1,
+                                          cursor: workspace.addingTxtsToUploads ? "not-allowed" : "pointer",
+                                        }}
+                                        onClick={() => addGeneratedTxtsToUploadList(workspace.workspaceId)}
+                                        disabled={workspace.addingTxtsToUploads}
+                                      >
+                                        {workspace.addingTxtsToUploads
+                                          ? tx("Adding TXT...", "正在加入 TXT...")
+                                          : tx("Add TXT to Upload files", "加入 TXT 到上傳文件")}
+                                      </button>
+                                      {workspace.txtsAddedToUploads ? (
+                                        <span style={styles.copiedText}>{tx("Added ✓", "已加入 ✓")}</span>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </div>
 
