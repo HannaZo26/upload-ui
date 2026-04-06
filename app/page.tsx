@@ -75,6 +75,14 @@ type SavedShortsHistoryEntry = {
   errorMessage: string;
 };
 
+
+type ShortLinkHistoryEntry = {
+  originalUrl: string;
+  shortUrl: string;
+  projectName: string;
+  createdAt: number;
+};
+
 type ShortsWorkspaceState = {
   workspaceId: string;
   title: string;
@@ -451,6 +459,8 @@ const LANGUAGE_STORAGE_KEY = "ucreator-console-lang";
 const SHORTS_HISTORY_PER_WORKSPACE = 3;
 const buildShortsHistoryStorageKey = (username: string) =>
   `ucreator-console-shorts-history:${username}`;
+const buildShortLinkHistoryStorageKey = (username: string) =>
+  `ucreator-console-shortlink-history:${username}`;
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -763,6 +773,7 @@ export default function Page() {
   const [activeShortsWorkspaceId, setActiveShortsWorkspaceId] =
     useState<string>(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
   const [shortsHistory, setShortsHistory] = useState<SavedShortsHistoryEntry[]>([]);
+  const [shortLinkHistory, setShortLinkHistory] = useState<ShortLinkHistoryEntry[]>([]);
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
@@ -908,6 +919,9 @@ export default function Page() {
   const shortsHistoryStorageKey = currentUser
     ? buildShortsHistoryStorageKey(currentUser.username)
     : "";
+  const shortLinkHistoryStorageKey = currentUser
+    ? buildShortLinkHistoryStorageKey(currentUser.username)
+    : "";
 
   const workspaceUiStorageKey = currentUser
     ? `ucreator-console-workspace-ui:${currentUser.username}`
@@ -979,6 +993,25 @@ export default function Page() {
       });
     },
     [currentUser, shortsHistoryStorageKey]
+  );
+
+
+  const persistShortLinkHistoryEntry = useCallback(
+    (entry: ShortLinkHistoryEntry) => {
+      if (!currentUser || !shortLinkHistoryStorageKey) return;
+
+      setShortLinkHistory((prev) => {
+        const deduped = prev.filter(
+          (item) => item.shortUrl !== entry.shortUrl && item.originalUrl !== entry.originalUrl
+        );
+        const next = [entry, ...deduped]
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, 5);
+        writeStoredJson(shortLinkHistoryStorageKey, next);
+        return next;
+      });
+    },
+    [currentUser, shortLinkHistoryStorageKey]
   );
 
   const hydrateShortsEntry = useCallback(
@@ -1246,9 +1279,16 @@ export default function Page() {
   useEffect(() => {
     if (!currentUser) {
       setShortsHistory([]);
+      setShortLinkHistory([]);
       setShortsWorkspaces(createInitialShortsWorkspaces());
       return;
     }
+
+    const storedShortLinkHistory = readStoredJson<ShortLinkHistoryEntry[]>(
+      buildShortLinkHistoryStorageKey(currentUser.username),
+      []
+    );
+    setShortLinkHistory(storedShortLinkHistory);
 
     const storedHistory = readStoredJson<SavedShortsHistoryEntry[]>(
       buildShortsHistoryStorageKey(currentUser.username),
@@ -1486,6 +1526,7 @@ export default function Page() {
     setShortsWorkspaces(createInitialShortsWorkspaces());
     setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
     setShortsHistory([]);
+    setShortLinkHistory([]);
   };
 
   const addFiles = (incoming: FileList | File[]) => {
@@ -2794,9 +2835,17 @@ export default function Page() {
         );
       }
 
-      setShortUrl(normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN));
+      const normalizedShortUrl = normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN);
+      setShortUrl(normalizedShortUrl);
       setShortUrlCopied(false);
       setShortUrlSuccess("Short URL generated successfully with gjw.us.");
+
+      persistShortLinkHistoryEntry({
+        originalUrl: longUrl.trim(),
+        shortUrl: normalizedShortUrl,
+        projectName: selectedProject?.name || "",
+        createdAt: Date.now(),
+      });
     } catch (err: any) {
       setShortUrlError(err?.message || "Failed to generate short URL.");
     } finally {
@@ -3302,6 +3351,43 @@ export default function Page() {
                       {shortUrlError ? (
                         <div style={styles.errorBox}>{shortUrlError}</div>
                       ) : null}
+
+                      <div style={styles.shortLinkHistoryCard}>
+                        <div style={styles.actionTitle}>
+                          {tx("Recent short links", "最近生成的短鏈接")}
+                        </div>
+                        {shortLinkHistory.length ? (
+                          <div style={styles.shortLinkHistoryList}>
+                            {shortLinkHistory.map((item, index) => (
+                              <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryRow}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={styles.shortLinkHistoryProject}>
+                                    {item.projectName || tx("Unknown project", "未命名項目")}
+                                  </div>
+                                  <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
+                                  <div style={styles.shortLinkHistoryOrigin}>
+                                    {tx("From long-video URL:", "對應長視頻鏈接：")} {item.originalUrl}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  style={secondaryButtonStyle}
+                                  onClick={() => navigator.clipboard.writeText(item.shortUrl)}
+                                >
+                                  {tx("Copy", "複製")}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={styles.helperText}>
+                            {tx(
+                              "Your 5 most recent short links will appear here.",
+                              "這裡會顯示最近生成的 5 筆短鏈接。"
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div style={styles.utmBuilderCard}>
@@ -3545,14 +3631,14 @@ export default function Page() {
                                             style={secondaryButtonStyle}
                                             onClick={() => restoreShortsHistoryEntry(entry)}
                                           >
-                                            {tx("Restore", "恢復")}
+                                            {lang === "zh" ? "恢復任務" : "Restore"}
                                           </button>
                                           <button
                                             type="button"
                                             style={secondaryButtonStyle}
                                             onClick={() => reloadShortsHistoryEntry(entry)}
                                           >
-                                            {tx("Reload", "重新載入")}
+                                            {lang === "zh" ? "刷新狀態" : "Refresh"}
                                           </button>
                                         </div>
                                       </div>
@@ -5213,6 +5299,50 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryBreak: {
     textAlign: "right",
+    wordBreak: "break-all",
+  },
+
+  shortLinkHistoryCard: {
+    marginTop: 8,
+    borderRadius: 16,
+    border: "1px solid #dce7f7",
+    background: "#ffffff",
+    padding: 14,
+    display: "grid",
+    gap: 10,
+  },
+  shortLinkHistoryList: {
+    display: "grid",
+    gap: 10,
+  },
+  shortLinkHistoryRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: "10px 12px",
+    border: "1px solid #e6eef9",
+    borderRadius: 14,
+    background: "#f8fbff",
+  },
+  shortLinkHistoryProject: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#5f7088",
+    marginBottom: 4,
+  },
+  shortLinkHistoryUrl: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#0d2242",
+    lineHeight: 1.5,
+    wordBreak: "break-all",
+    marginBottom: 4,
+  },
+  shortLinkHistoryOrigin: {
+    fontSize: 12,
+    color: "#607086",
+    lineHeight: 1.5,
     wordBreak: "break-all",
   },
 };
