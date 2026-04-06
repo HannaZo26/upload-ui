@@ -116,11 +116,12 @@ const SHORTS_WORKSPACE_CONFIG = [
   { workspaceId: "workspace-2", title: "Workspace 2" },
   { workspaceId: "workspace-3", title: "Workspace 3" },
 ];
+const MOBILE_BREAKPOINT = 768;
+const TABLET_BREAKPOINT = 1080;
 const WORKFLOW_STEPS = [
   "Choose social platform destinations",
   "Generate the short link",
-  "Generate and review shorts",
-  "Write and prepare the TXT files",
+  "Generate shorts, TXT, and review",
   "Upload the mp4 and matching txt",
   "Review the summary and start automation",
 ];
@@ -691,6 +692,8 @@ export default function Page() {
     readStoredJson<"en" | "zh">(LANGUAGE_STORAGE_KEY, "en")
   );
 
+  const [viewportWidth, setViewportWidth] = useState<number>(1200);
+
   const n8nWebhookUrl =
     "https://n8n.influencerconnectagency.biz/webhook/upload-entry";
 
@@ -728,6 +731,18 @@ export default function Page() {
   const [utmFields, setUtmFields] = useState<UtmBuilderFields>(EMPTY_UTM_FIELDS);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const availableFolders = useMemo(() => {
     if (!currentUser) return [];
@@ -1977,6 +1992,86 @@ export default function Page() {
     }
   };
 
+  const buildViralClipText = useCallback(
+    (clip: ShortsClipOption) => {
+      const hasChinese = /[㐀-鿿]/.test(`${clip.title} ${clip.description}`);
+      const rawTitle = clip.title.trim() || (hasChinese ? "這段內容值得看完" : "This clip is worth watching");
+      const rawDescription = clip.description.trim();
+      const normalizeSnippet = (value: string, limit: number) => {
+        const compact = value.replace(/\s+/g, " ").trim();
+        if (!compact) return "";
+        return compact.length > limit ? `${compact.slice(0, limit).trim()}…` : compact;
+      };
+
+      if (hasChinese) {
+        const hook = normalizeSnippet(rawDescription, 26) || "關鍵資訊一次看懂，先收藏再分享。";
+        const cta = /[!?！？]$/.test(rawTitle)
+          ? `🔥 ${normalizeSnippet(rawTitle, 22)}`
+          : `🔥 ${normalizeSnippet(rawTitle, 22)}！`;
+        return [
+          cta,
+          `⚡ ${hook}`,
+          "👀 一看就懂的重點整理，留言告訴我你的看法。",
+        ]
+          .filter(Boolean)
+          .join("
+");
+      }
+
+      const hook = normalizeSnippet(rawDescription, 58) || "Quick breakdown with the key point upfront.";
+      return [
+        `🔥 ${normalizeSnippet(rawTitle, 40)}`,
+        `⚡ ${hook}`,
+        "👀 Watch to the end and tell me if you agree.",
+      ]
+        .filter(Boolean)
+        .join("
+");
+    },
+    []
+  );
+
+  const generateViralClipText = useCallback(
+    async (workspaceId: string, clipId: string) => {
+      const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+      if (!workspace) return;
+      const clip = workspace.clips.find((item) => item.id === clipId);
+      if (!clip) return;
+
+      const generatedText = buildViralClipText(clip);
+      const firstEmptyIndex = workspace.txtDescriptions.findIndex((value) => !value.trim());
+      const targetIndex = firstEmptyIndex >= 0 ? firstEmptyIndex : 0;
+
+      updateShortsWorkspace(workspaceId, (currentWorkspace) => ({
+        txtDescriptions: currentWorkspace.txtDescriptions.map((value, index) =>
+          index === targetIndex ? generatedText : value
+        ),
+        copiedClipActionKey: `${clipId}:viral`,
+        successMessage: tx(
+          `Viral copy added to TXT Description ${targetIndex + 1}.`,
+          `已將爆款文案加入文本描述 ${targetIndex + 1}。`
+        ),
+        errorMessage: "",
+      }));
+
+      try {
+        await navigator.clipboard.writeText(generatedText);
+      } catch {
+        // no-op
+      }
+
+      window.setTimeout(() => {
+        updateShortsWorkspace(workspaceId, (currentWorkspace) => ({
+          copiedClipActionKey:
+            currentWorkspace.copiedClipActionKey === `${clipId}:viral`
+              ? ""
+              : currentWorkspace.copiedClipActionKey,
+        }));
+      }, 1800);
+    },
+    [buildViralClipText, shortsWorkspaces, tx]
+  );
+
   const downloadSelectedShorts = async (workspaceId: string) => {
     const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
     if (!workspace) return;
@@ -2554,10 +2649,68 @@ export default function Page() {
     }
   };
 
+  const isMobile = viewportWidth <= MOBILE_BREAKPOINT;
+  const isTablet = viewportWidth <= TABLET_BREAKPOINT;
+
+  const shellStyle = isTablet
+    ? { ...styles.shell, gridTemplateColumns: "1fr", minHeight: "auto" }
+    : styles.shell;
+  const sidebarStyle = isTablet
+    ? {
+        ...styles.sidebar,
+        padding: isMobile ? 16 : 18,
+        borderRight: "none",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        gap: isMobile ? 12 : 14,
+      }
+    : styles.sidebar;
+  const navCardStyle = isMobile ? { ...styles.navCard, display: "none" } : styles.navCard;
+  const mainAreaStyle = isMobile
+    ? { ...styles.mainArea, padding: 14, gap: 16 }
+    : isTablet
+    ? { ...styles.mainArea, padding: 18, gap: 18 }
+    : styles.mainArea;
+  const topbarStyle = isMobile
+    ? { ...styles.topbar, flexDirection: "column" as const, alignItems: "stretch" }
+    : styles.topbar;
+  const panelStyle = isMobile
+    ? { ...styles.panel, padding: 16, borderRadius: 18 }
+    : styles.panel;
+  const okurlStepGridStyle = isMobile
+    ? { ...styles.okurlStepGrid, gridTemplateColumns: "1fr", gap: 16 }
+    : styles.okurlStepGrid;
+  const formGridTwoStyle = isMobile
+    ? { ...styles.formGridTwo, gridTemplateColumns: "1fr", gap: 12 }
+    : styles.formGridTwo;
+  const shortUrlRowStyle = isMobile
+    ? { ...styles.shortUrlRow, flexDirection: "column" as const, alignItems: "stretch" }
+    : styles.shortUrlRow;
+  const shortsPanelStyle = isMobile
+    ? { ...styles.shortsPanel, gridTemplateColumns: "1fr", gap: 16 }
+    : styles.shortsPanel;
+  const shortsClipListStyle = isMobile
+    ? { ...styles.shortsClipList, gridTemplateColumns: "1fr" }
+    : styles.shortsClipList;
+  const shortsPreviewCardStyle = isMobile
+    ? { ...styles.shortsPreviewCard, padding: 16 }
+    : styles.shortsPreviewCard;
+  const workspaceTxtSectionStyle = isMobile
+    ? { ...styles.workspaceTxtSection, marginTop: 20, paddingTop: 16 }
+    : styles.workspaceTxtSection;
+  const workspaceTxtTextareaStyle = isMobile
+    ? { ...styles.workspaceTxtTextarea, minHeight: 72, fontSize: 14 }
+    : styles.workspaceTxtTextarea;
+  const primaryButtonStyle = isMobile
+    ? { ...styles.primaryButton, width: "100%", justifyContent: "center" }
+    : styles.primaryButton;
+  const secondaryButtonStyle = isMobile
+    ? { ...styles.secondaryButton, width: "100%", justifyContent: "center" }
+    : styles.secondaryButton;
+
   return (
     <main style={styles.page}>
-      <div style={styles.shell}>
-        <aside style={styles.sidebar}>
+      <div style={shellStyle}>
+        <aside style={sidebarStyle}>
           <div>
             <div style={styles.logoBox}>
               <div style={styles.logoMark}>
@@ -2574,7 +2727,7 @@ export default function Page() {
                 <div style={styles.sidebarInfoName}>{currentUser.username}</div>
                 <div style={styles.sidebarInfoMeta}>Signed in and ready to upload</div>
                 <button
-                  style={{ ...styles.secondaryButton, width: "100%", marginTop: 12 }}
+                  style={{ ...secondaryButtonStyle, width: "100%", marginTop: 12 }}
                   onClick={handleLogout}
                 >
                   Log out
@@ -2583,7 +2736,7 @@ export default function Page() {
             ) : null}
           </div>
 
-          <div style={styles.navCard}>
+          <div style={navCardStyle}>
             <div style={styles.navSectionTitle}>Steps</div>
             <div style={styles.stepsStack}>
               {WORKFLOW_STEPS.map((step, index) => (
@@ -2596,8 +2749,8 @@ export default function Page() {
           </div>
         </aside>
 
-        <div style={styles.mainArea}>
-          <div style={styles.topbar}>
+        <div style={mainAreaStyle}>
+          <div style={topbarStyle}>
             <div>
               <h1 style={styles.title}>{tx("Content Upload Dashboard", "內容上傳系統")}</h1>
             </div>
@@ -2679,7 +2832,7 @@ export default function Page() {
           ) : (
             <div style={styles.workspace}>
               <div style={styles.contentColumn}>
-                <section style={styles.panel}>
+                <section style={panelStyle}>
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 1</div>
@@ -2691,7 +2844,7 @@ export default function Page() {
                     Choose the social platform first.
                   </div>
 
-                  <div style={styles.formGridTwo}>
+                  <div style={formGridTwoStyle}>
                     <div>
                       <label style={styles.label}>Facebook Page</label>
                       <select
@@ -2736,7 +2889,7 @@ export default function Page() {
                   </div>
                 </section>
 
-                <section style={styles.panel}>
+                <section style={panelStyle}>
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 2</div>
@@ -2749,7 +2902,7 @@ export default function Page() {
                     then generate the short link.
                   </div>
 
-                  <div style={styles.okurlStepGrid}>
+                  <div style={okurlStepGridStyle}>
                     <div style={styles.formStack}>
                       <div>
                         <label style={styles.label}>Original URL</label>
@@ -2780,7 +2933,7 @@ export default function Page() {
                           </select>
                           <button
                             type="button"
-                            style={styles.secondaryButton}
+                            style={secondaryButtonStyle}
                             onClick={loadOkurlProjects}
                             disabled={projectsLoading}
                           >
@@ -2833,7 +2986,7 @@ export default function Page() {
                           />
                           <button
                             type="button"
-                            style={styles.secondaryButton}
+                            style={secondaryButtonStyle}
                             onClick={copyShortUrl}
                           >
                             Copy
@@ -2882,7 +3035,7 @@ export default function Page() {
                           </select>
                         </div>
 
-                        <div style={styles.formGridTwo}>
+                        <div style={formGridTwoStyle}>
                           <div>
                             <label style={styles.label}>Source</label>
                             <input
@@ -2976,7 +3129,7 @@ export default function Page() {
                   </div>
                 </section>
 
-                <section style={styles.panel}>
+                <section style={panelStyle}>
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>{tx("Step 3", "第 3 步")}</div>
@@ -3039,7 +3192,7 @@ export default function Page() {
                             </div>
                             <button
                               type="button"
-                              style={styles.secondaryButton}
+                              style={secondaryButtonStyle}
                               onClick={() => {
                                 setActiveShortsWorkspaceId(workspace.workspaceId);
                                 toggleShortsWorkspaceCollapse(workspace.workspaceId);
@@ -3090,14 +3243,14 @@ export default function Page() {
                                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                           <button
                                             type="button"
-                                            style={styles.secondaryButton}
+                                            style={secondaryButtonStyle}
                                             onClick={() => restoreShortsHistoryEntry(entry)}
                                           >
                                             {tx("Restore", "恢復")}
                                           </button>
                                           <button
                                             type="button"
-                                            style={styles.secondaryButton}
+                                            style={secondaryButtonStyle}
                                             onClick={() => reloadShortsHistoryEntry(entry)}
                                           >
                                             {tx("Reload", "重新載入")}
@@ -3109,7 +3262,7 @@ export default function Page() {
                                 </div>
                               ) : null}
 
-                              <div style={styles.shortsPanel}>
+                              <div style={shortsPanelStyle}>
                                 <div style={styles.formStack}>
                                   <div>
                                     <label style={styles.label}>{tx("Long video URL", "Long video URL")}</label>
@@ -3309,8 +3462,7 @@ export default function Page() {
                                     </button>
                                   </div>
 
-                                  <div style={styles.workspaceTxtSection}>
-                                    <div style={styles.stepPill}>{tx("Step 4", "步驟 4")}</div>
+                                  <div style={workspaceTxtSectionStyle}>
                                     <div style={styles.workspaceTxtHeaderRow}>
                                       <div>
                                         <div style={styles.actionTitle}>{tx("TXT generator", "文本生成器")}</div>
@@ -3329,7 +3481,7 @@ export default function Page() {
                                           <label style={styles.label}>{tx(`TXT Description ${index + 1}`, `文本描述 ${index + 1}`)}</label>
                                           <textarea
                                             rows={3}
-                                            style={styles.workspaceTxtTextarea}
+                                            style={workspaceTxtTextareaStyle}
                                             value={value}
                                             onChange={(e) => updateTxtDescription(workspace.workspaceId, index, e.target.value)}
                                             placeholder={tx(
@@ -3363,7 +3515,7 @@ export default function Page() {
                                   </div>
                                 </div>
 
-                                <div style={styles.shortsPreviewCard}>
+                                <div style={shortsPreviewCardStyle}>
                                   <div style={styles.shortsPreviewHeader}>
                                     <div style={styles.actionTitle}>{tx("Preview clips", "預覽 clips")}</div>
                                     <div style={styles.shortsPreviewPills}>
@@ -3406,7 +3558,7 @@ export default function Page() {
                                   ) : null}
 
                                   {workspace.clips.length ? (
-                                    <div style={styles.shortsClipList}>
+                                    <div style={shortsClipListStyle}>
                                       {workspace.clips.map((clip) => {
                                         const selected = workspace.selectedShortIds.includes(clip.id);
                                         const uploaded = workspace.uploadedClipIds.includes(clip.id);
@@ -3482,8 +3634,27 @@ export default function Page() {
                                                 >
                                                   {tx("Copy title and description", "複製標題和描述")}
                                                 </button>
+                                                <button
+                                                  type="button"
+                                                  style={{ ...styles.miniActionButton, marginTop: 8 }}
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    void generateViralClipText(workspace.workspaceId, clip.id);
+                                                  }}
+                                                >
+                                                  {tx(
+                                                    "Generate viral title and description",
+                                                    "生成爆款標題和描述"
+                                                  )}
+                                                </button>
                                                 {workspace.copiedClipActionKey === `${clip.id}:combined` ? (
                                                   <span style={styles.copiedText}>{tx("Copied", "已複製")}</span>
+                                                ) : null}
+                                                {workspace.copiedClipActionKey === `${clip.id}:viral` ? (
+                                                  <span style={styles.copiedText}>
+                                                    {tx("Viral copy ready", "爆款文案已生成")}
+                                                  </span>
                                                 ) : null}
                                               </div>
                                             </div>
@@ -3550,10 +3721,10 @@ export default function Page() {
                   </div>
                 </section>
 
-                <section style={styles.panel}>
+                <section style={panelStyle}>
                   <div style={styles.sectionHeader}>
                     <div>
-                      <div style={styles.kicker}>Step 5</div>
+                      <div style={styles.kicker}>{tx("Step 4", "第 4 步")}</div>
                       <div style={styles.panelTitle}>{tx("Upload files", "上傳文件")}</div>
                     </div>
                   </div>
@@ -3627,7 +3798,7 @@ export default function Page() {
                           </div>
                           <button
                             type="button"
-                            style={styles.secondaryButton}
+                            style={secondaryButtonStyle}
                             onClick={() => removeFile(idx)}
                           >
                             Remove
@@ -3638,10 +3809,10 @@ export default function Page() {
                   </div>
                 </section>
 
-                <section style={styles.panel}>
+                <section style={panelStyle}>
                   <div style={styles.sectionHeader}>
                     <div>
-                      <div style={styles.kicker}>Step 6</div>
+                      <div style={styles.kicker}>{tx("Step 5", "第 5 步")}</div>
                       <div style={styles.panelTitle}>{tx("Start automation", "開始自動化")}</div>
                     </div>
                   </div>
