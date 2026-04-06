@@ -563,7 +563,7 @@ const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
   }
 
   if (normalized === "FAILED") {
-    return { color: "#b45309", fontWeight: 700 };
+    return { color: "#dc2626", fontWeight: 700 };
   }
 
   if (normalized === "IN_PROGRESS" || normalized === "SCHEDULED") {
@@ -572,13 +572,6 @@ const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
 
   return { color: "#64748b", fontWeight: 700 };
 };
-
-const getDisplayJobStatusLabel = (status?: string) => {
-  const normalized = (status || "").trim().toUpperCase();
-  if (normalized === "FAILED") return "PROCESSING";
-  return normalized;
-};
-
 
 const isTerminalShortsStatus = (status: string) => {
   const normalized = status.trim().toUpperCase();
@@ -766,7 +759,6 @@ export default function Page() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
-  const [activatedSuccessfully, setActivatedSuccessfully] = useState(false);
 
   const [longUrl, setLongUrl] = useState("");
   const [customSlug, setCustomSlug] = useState("");
@@ -1405,33 +1397,6 @@ export default function Page() {
   }, [submitting]);
 
   useEffect(() => {
-    if (!activatedSuccessfully || typeof window === "undefined") return;
-
-    const pieces = Array.from({ length: 18 }).map((_, index) => {
-      const el = document.createElement("span");
-      el.className = "ucreator-confetti-piece";
-      el.style.left = `${5 + Math.random() * 90}%`;
-      el.style.animationDelay = `${Math.random() * 0.25}s`;
-      el.style.animationDuration = `${1.8 + Math.random() * 1.2}s`;
-      el.style.transform = `rotate(${Math.random() * 360}deg)`;
-      el.style.background = index % 3 === 0 ? "#f5c451" : index % 3 === 1 ? "#f59e0b" : "#fde68a";
-      return el;
-    });
-
-    pieces.forEach((piece) => document.body.appendChild(piece));
-
-    const cleanup = window.setTimeout(() => {
-      pieces.forEach((piece) => piece.remove());
-      setActivatedSuccessfully(false);
-    }, 2600);
-
-    return () => {
-      window.clearTimeout(cleanup);
-      pieces.forEach((piece) => piece.remove());
-    };
-  }, [activatedSuccessfully]);
-
-  useEffect(() => {
     if (!pageName || !okurlProjects.length) return;
 
     const matched =
@@ -1975,22 +1940,11 @@ export default function Page() {
         });
       } catch (err: any) {
         const message = err?.message || "Failed to prepare the shorts preview.";
-        const keepProcessing =
-          isRetryableShortsMessage(message) ||
-          message.toLowerCase().includes("still processing") ||
-          message.toLowerCase().includes("wait a little longer") ||
-          message.toLowerCase().includes("processing this job");
-
         updateShortsWorkspace(workspaceId, (workspace) => ({
           generatingShorts: false,
-          errorMessage: keepProcessing
-            ? tx(
-                "Processing paused while this page or network was inactive. Use Refresh to continue checking.",
-                "此任務在頁面休眠或網路中斷期間暫停顯示。請點擊「刷新狀態」繼續檢查。"
-              )
-            : message,
+          errorMessage: message,
           successMessage: "",
-          jobStatus: keepProcessing ? "IN_PROGRESS" : workspace.jobStatus || "FAILED",
+          jobStatus: workspace.jobStatus || "FAILED",
         }));
 
         persistShortsHistoryEntry({
@@ -2000,15 +1954,15 @@ export default function Page() {
           mode,
           rangeStart,
           rangeEnd,
-          status: keepProcessing ? "IN_PROGRESS" : "FAILED",
-          progress: keepProcessing ? latestProgress : null,
+          status: "FAILED",
+          progress: null,
           clips: [],
           selectedShortIds: [],
           uploadedClipIds: [],
           createdAt,
           updatedAt: Date.now(),
           successMessage: "",
-          errorMessage: keepProcessing ? "" : message,
+          errorMessage: message,
         });
       } finally {
         if (activeShortsMonitorRef.current[workspaceId] === jobId) {
@@ -2884,7 +2838,7 @@ export default function Page() {
       const normalizedShortUrl = normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN);
       setShortUrl(normalizedShortUrl);
       setShortUrlCopied(false);
-      setShortUrlSuccess("Generated");
+      setShortUrlSuccess("Short URL generated successfully with gjw.us.");
 
       persistShortLinkHistoryEntry({
         originalUrl: longUrl.trim(),
@@ -2962,11 +2916,10 @@ export default function Page() {
 
     try {
       setSubmitting(true);
-      setActivatedSuccessfully(false);
       setSuccess(
         tx(
-          "Activating automation... Please keep this page open until Activated successfully appears.",
-          "正在開啟自動化……請保持此頁面開啟，直到出現「自動化已開啟成功」。"
+          "Starting automation... Please keep this page open until Upload successful appears.",
+          "正在開始自動化……請保持此頁面開啟，直到出現上傳成功提示。"
         )
       );
 
@@ -3025,17 +2978,16 @@ export default function Page() {
       setShortUrlSuccess("");
       setShortUrlCopied(false);
       clearSubmittedShortsWorkspaces();
-      setActivatedSuccessfully(true);
       setSuccess(
-        tx(
-          "Activated successfully",
-          "自動化已開啟成功"
-        )
+        data?.message ||
+          tx(
+            "Automation started successfully. Uploaded workspaces have been cleared for the next long-video URL.",
+            "自動化已成功啟動。已上傳的工作區已清空，可開始下一個 long-video URL。"
+          )
       );
       setError("");
     } catch (err: any) {
-      setActivatedSuccessfully(false);
-      setError(err?.message || "Failed to activate automation.");
+      setError(err?.message || "Failed to start automation.");
       setSuccess("");
     } finally {
       setSubmitting(false);
@@ -3102,25 +3054,6 @@ export default function Page() {
 
   return (
     <main style={styles.page}>
-      <style>{`
-        .ucreator-confetti-piece {
-          position: fixed;
-          top: -14px;
-          width: 10px;
-          height: 18px;
-          border-radius: 3px;
-          pointer-events: none;
-          z-index: 9999;
-          opacity: 0.95;
-          animation-name: ucreatorConfettiFall;
-          animation-timing-function: ease-out;
-          animation-fill-mode: forwards;
-        }
-        @keyframes ucreatorConfettiFall {
-          0% { transform: translateY(0) rotate(0deg); opacity: 0.98; }
-          100% { transform: translateY(95vh) rotate(540deg); opacity: 0; }
-        }
-      `}</style>
       <div style={shellStyle}>
         <aside style={sidebarStyle}>
           <div>
@@ -3387,9 +3320,6 @@ export default function Page() {
                         >
                           {creatingShortUrl ? "Generating..." : "Generate Short URL"}
                         </button>
-                        {shortUrlSuccess ? (
-                          <span style={styles.copiedText}>{shortUrlSuccess}</span>
-                        ) : null}
                       </div>
 
                       <div>
@@ -3414,6 +3344,10 @@ export default function Page() {
                         </div>
                       </div>
 
+                      {shortUrlSuccess ? (
+                        <div style={styles.successBox}>{shortUrlSuccess}</div>
+                      ) : null}
+
                       {shortUrlError ? (
                         <div style={styles.errorBox}>{shortUrlError}</div>
                       ) : null}
@@ -3435,6 +3369,13 @@ export default function Page() {
                                     {tx("From long-video URL:", "對應長視頻鏈接：")} {item.originalUrl}
                                   </div>
                                 </div>
+                                <button
+                                  type="button"
+                                  style={secondaryButtonStyle}
+                                  onClick={() => navigator.clipboard.writeText(item.shortUrl)}
+                                >
+                                  {tx("Copy", "複製")}
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -3679,7 +3620,7 @@ export default function Page() {
                                             {entry.sourceUrl || "Untitled job"}
                                           </div>
                                           <div style={styles.helperText}>
-                                            <span style={getHistoryStatusStyle(entry.status)}>{getDisplayJobStatusLabel(entry.status) || "-"}</span>
+                                            <span style={getHistoryStatusStyle(entry.status)}>{entry.status || "-"}</span>
                                             {" · "}
                                             {formatHistoryTimestamp(entry.updatedAt)}
                                           </div>
@@ -3964,7 +3905,7 @@ export default function Page() {
                                     <div style={styles.actionTitle}>{tx("Preview clips", "預覽 clips")}</div>
                                     <div style={styles.shortsPreviewPills}>
                                       {workspace.jobStatus ? (
-                                        <div style={styles.statusPill}>{getDisplayJobStatusLabel(workspace.jobStatus)}</div>
+                                        <div style={styles.statusPill}>{workspace.jobStatus}</div>
                                       ) : null}
                                       {workspace.jobProgress !== null ? (
                                         <div style={styles.progressPill}>{workspace.jobProgress}%</div>
@@ -4297,14 +4238,14 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>{tx("Step 5", "第 5 步")}</div>
-                      <div style={styles.panelTitle}>{tx("Activate automation", "開啟自動化")}</div>
+                      <div style={styles.panelTitle}>{tx("Start automation", "開始自動化")}</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then activate the automation. Please keep this page open until you see Activated successfully.",
-                      "檢查目前摘要後再開啟自動化。請保持此頁面開啟，直到看到「自動化已開啟成功」。"
+                      "Review the current summary, then start the automation. Please keep this page open until you see Upload successful.",
+                      "檢查目前摘要後再開始自動化。請不要關閉此頁面，直到看到 Upload successful 才算完成。"
                     )}
                   </div>
 
@@ -4353,24 +4294,14 @@ export default function Page() {
                       disabled={submitting || currentUser?.isDemo}
                     >
                       {currentUser?.isDemo
-                        ? "Demo account cannot activate automation"
+                        ? "Demo account cannot start automation"
                         : submitting
-                        ? "Activating..."
-                        : tx("Activate automation", "開啟自動化")}
+                        ? "Starting..."
+                        : "Start automation"}
                     </button>
                   </div>
 
-                  {success ? (
-                    <div
-                      style={
-                        success === tx("Activated successfully", "自動化已開啟成功")
-                          ? styles.successCelebrationBox
-                          : styles.successBox
-                      }
-                    >
-                      {success}
-                    </div>
-                  ) : null}
+                  {success ? <div style={styles.successBox}>{success}</div> : null}
                   {error ? <div style={styles.errorBox}>{error}</div> : null}
                 </section>
               </div>
@@ -5358,16 +5289,6 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #b8e8ca",
     fontWeight: 600,
   },
-  successCelebrationBox: {
-    marginTop: 16,
-    borderRadius: 16,
-    padding: "16px 18px",
-    background: "linear-gradient(180deg, #fff8dd 0%, #fff2b8 100%)",
-    color: "#8a5a00",
-    border: "1px solid #f5d46b",
-    fontWeight: 800,
-    boxShadow: "0 12px 28px rgba(245, 196, 81, 0.22)",
-  },
   errorBox: {
     marginTop: 16,
     borderRadius: 14,
@@ -5402,16 +5323,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortLinkHistoryList: {
     display: "grid",
-    gap: 8,
+    gap: 10,
   },
   shortLinkHistoryRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 10,
-    padding: "8px 10px",
+    gap: 12,
+    padding: "10px 12px",
     border: "1px solid #e6eef9",
-    borderRadius: 12,
+    borderRadius: 14,
     background: "#f8fbff",
   },
   shortLinkHistoryProject: {
