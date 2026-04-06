@@ -708,9 +708,10 @@ const createInitialShortsWorkspaceState = (
 });
 
 const createInitialShortsWorkspaces = () =>
-  SHORTS_WORKSPACE_CONFIG.map((item) =>
-    createInitialShortsWorkspaceState(item.workspaceId, item.title)
-  );
+  SHORTS_WORKSPACE_CONFIG.map((item, index) => ({
+    ...createInitialShortsWorkspaceState(item.workspaceId, item.title),
+    isCollapsed: index !== 0,
+  }));
 
 export default function Page() {
   const [loginUsername, setLoginUsername] = useState("");
@@ -894,6 +895,10 @@ export default function Page() {
   const mirroredPlatformName = pageName || "";
   const shortsHistoryStorageKey = currentUser
     ? buildShortsHistoryStorageKey(currentUser.username)
+    : "";
+
+  const workspaceUiStorageKey = currentUser
+    ? buildWorkspaceUiStorageKey(currentUser.username)
     : "";
   const activeShortsWorkspace = useMemo(
     () =>
@@ -1277,6 +1282,48 @@ export default function Page() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (!workspaceUiStorageKey) return;
+
+    const storedUi = readStoredJson<Array<{ workspaceId: string; isCollapsed: boolean }>>(
+      workspaceUiStorageKey,
+      []
+    );
+
+    if (!storedUi.length) {
+      setShortsWorkspaces((prev) =>
+        prev.map((workspace, index) => ({
+          ...workspace,
+          isCollapsed: index !== 0,
+        }))
+      );
+      return;
+    }
+
+    setShortsWorkspaces((prev) =>
+      prev.map((workspace, index) => {
+        const saved = storedUi.find((item) => item.workspaceId === workspace.workspaceId);
+        return {
+          ...workspace,
+          isCollapsed:
+            typeof saved?.isCollapsed === "boolean" ? saved.isCollapsed : index !== 0,
+        };
+      })
+    );
+  }, [workspaceUiStorageKey]);
+
+  useEffect(() => {
+    if (!workspaceUiStorageKey || !shortsWorkspaces.length) return;
+
+    writeStoredJson(
+      workspaceUiStorageKey,
+      shortsWorkspaces.map((workspace) => ({
+        workspaceId: workspace.workspaceId,
+        isCollapsed: workspace.isCollapsed,
+      }))
+    );
+  }, [shortsWorkspaces, workspaceUiStorageKey]);
+
+  useEffect(() => {
     if (!currentUser) return;
     persistSessionState(currentUser, pageName, folderName || pageName);
   }, [currentUser, folderName, pageName, persistSessionState]);
@@ -1403,6 +1450,9 @@ export default function Page() {
   };
 
   const handleLogout = () => {
+    if (currentUser) {
+      removeStoredJson(buildWorkspaceUiStorageKey(currentUser.username));
+    }
     removeStoredJson(SESSION_STORAGE_KEY);
     setCurrentUser(null);
     setLoginUsername("");
@@ -1455,6 +1505,43 @@ export default function Page() {
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const editTxtFile = async (index: number) => {
+    const targetFile = files[index];
+    if (!targetFile) return;
+
+    const isTxtFile =
+      targetFile.type.startsWith("text/") || /\.txt$/i.test(targetFile.name);
+    if (!isTxtFile) return;
+
+    try {
+      const currentContent = await targetFile.text();
+      const nextContent = window.prompt(
+        lang === "zh" ? "修改 TXT 內容：" : "Edit TXT content:",
+        currentContent
+      );
+
+      if (nextContent === null) return;
+
+      const updatedFile = new File(["﻿" + nextContent], targetFile.name, {
+        type: "text/plain;charset=utf-8",
+        lastModified: Date.now(),
+      }) as UploadableFile;
+
+      if (targetFile.originalTitle) {
+        updatedFile.originalTitle = targetFile.originalTitle;
+      }
+
+      setFiles((prev) =>
+        prev.map((file, fileIndex) => (fileIndex === index ? updatedFile : file))
+      );
+    } catch (err) {
+      setError(
+        lang === "zh" ? "TXT 文件暫時無法編輯，請稍後再試。" : "Unable to edit this TXT file right now."
+      );
+      setSuccess("");
+    }
   };
 
   const handlePageChange = (value: string) => {
@@ -3904,13 +3991,24 @@ export default function Page() {
                               </div>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            style={secondaryButtonStyle}
-                            onClick={() => removeFile(idx)}
-                          >
-                            Remove
-                          </button>
+                          <div style={styles.fileRowActions}>
+                            {isTxtFile ? (
+                              <button
+                                type="button"
+                                style={secondaryButtonStyle}
+                                onClick={() => void editTxtFile(idx)}
+                              >
+                                {tx("Edit", "編輯")}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              style={secondaryButtonStyle}
+                              onClick={() => removeFile(idx)}
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
