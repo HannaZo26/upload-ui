@@ -103,10 +103,12 @@ type ShortsWorkspaceState = {
 
 const SHORT_LINK_DOMAIN = "gjw.us";
 const TXT_BOX_COUNT = 5;
-const SHORTSGEN_MAX_POLL_ATTEMPTS = 80;
-const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 255;
-const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 1500;
-const SHORTSGEN_RESULTS_MAX_RETRIES = 6;
+const SHORTSGEN_MAX_POLL_ATTEMPTS = 120;
+const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 360;
+const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 2000;
+const SHORTSGEN_RESULTS_MAX_RETRIES = 10;
+const SHORTSGEN_CREATE_MAX_RETRIES = 2;
+const SHORTSGEN_FAILED_STATUS_GRACE_POLLS = 3;
 const SHORTS_RANGE_PRESETS = [
   { label: "Full video", start: "", end: "" },
   { label: "First 2 min", start: "00:00", end: "02:00" },
@@ -505,6 +507,23 @@ const getPollDelayMs = (attempt: number) => {
   if (attempt < 30) return 6000;
   return 10000;
 };
+
+const isRetryableShortsMessage = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes("still processing") ||
+    normalized.includes("upstream") ||
+    normalized.includes("temporar") ||
+    normalized.includes("timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("network") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("empty") ||
+    normalized.includes("no clips")
+  );
+};
+
 
 const formatHistoryTimestamp = (timestamp: number) => {
   if (!timestamp) return "";
@@ -1559,6 +1578,7 @@ export default function Page() {
         });
         let finalStatus = "";
         let latestProgress: number | null = null;
+        let failedStatusGraceCount = 0;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
           const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
@@ -1618,12 +1638,27 @@ export default function Page() {
           }
 
           if (finalStatus === "FAILED") {
-            throw new Error(
+            const failedMessage =
               statusData?.error ||
-                statusData?.message ||
-                statusData?.upstream?.message ||
-                "Shorts generation failed."
-            );
+              statusData?.message ||
+              statusData?.upstream?.message ||
+              "";
+            const allowGracePolling =
+              failedStatusGraceCount < SHORTSGEN_FAILED_STATUS_GRACE_POLLS &&
+              (!failedMessage || isRetryableShortsMessage(failedMessage));
+
+            if (allowGracePolling) {
+              failedStatusGraceCount += 1;
+              updateShortsWorkspace(workspaceId, {
+                jobStatus: "IN_PROGRESS",
+                generatingShorts: true,
+                errorMessage: "",
+              });
+              await sleep(getPollDelayMs(attempt));
+              continue;
+            }
+
+            throw new Error(failedMessage || "Shorts generation failed.");
           }
 
           await sleep(getPollDelayMs(attempt));
@@ -1633,7 +1668,7 @@ export default function Page() {
           throw new Error(
             isFullVideoAiClipping
               ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs can take a long time. Please wait a bit longer or use First 2 / 3 / 5 min for faster results."
-              : "ShortsGen is still processing this job. Please wait a little longer and try again."
+              : "ShortsGen is still processing this job. Please wait a little longer, then use Reload to continue checking."
           );
         }
 
@@ -1889,28 +1924,42 @@ export default function Page() {
         successMessage: "",
       });
 
-      const createRes = await fetch("/api/shortsgen/jobs", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          source_url: workspace.sourceUrl.trim(),
-          options: shortsOptions,
-        }),
-      });
+      let createData: any = null;
+      let jobId = "";
 
-      const createData = await readResponseData(createRes);
+      for (let createAttempt = 0; createAttempt < SHORTSGEN_CREATE_MAX_RETRIES; createAttempt += 1) {
+        const createRes = await fetch("/api/shortsgen/jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            source_url: workspace.sourceUrl.trim(),
+            options: shortsOptions,
+          }),
+        });
 
-      if (!createRes.ok) {
-        throw new Error(
+        createData = await readResponseData(createRes);
+
+        if (createRes.ok) {
+          jobId = pickFirstString(createData?.id, createData?.job_id);
+          if (jobId) {
+            break;
+          }
+        }
+
+        const createMessage =
           createData?.error ||
-            createData?.message ||
-            "Failed to submit the ShortsGen job."
-        );
-      }
+          createData?.message ||
+          "Failed to submit the ShortsGen job.";
 
-      const jobId = pickFirstString(createData?.id, createData?.job_id);
+        if (createAttempt < SHORTSGEN_CREATE_MAX_RETRIES - 1 && isRetryableShortsMessage(createMessage)) {
+          await sleep(1800);
+          continue;
+        }
+
+        throw new Error(createMessage || "ShortsGen did not return a job ID.");
+      }
 
       if (!jobId) {
         throw new Error("ShortsGen did not return a job ID.");
