@@ -3310,6 +3310,7 @@ export default function Page() {
                                   </div>
 
                                   <div style={styles.workspaceTxtSection}>
+                                    <div style={styles.stepPill}>{tx("Step 4", "步驟 4")}</div>
                                     <div style={styles.workspaceTxtHeaderRow}>
                                       <div>
                                         <div style={styles.actionTitle}>{tx("TXT generator", "文本生成器")}</div>
@@ -3327,6 +3328,7 @@ export default function Page() {
                                         <div key={`${workspace.workspaceId}-txt-${index}`} style={styles.workspaceTxtCard}>
                                           <label style={styles.label}>{tx(`TXT Description ${index + 1}`, `文本描述 ${index + 1}`)}</label>
                                           <textarea
+                                            rows={3}
                                             style={styles.workspaceTxtTextarea}
                                             value={value}
                                             onChange={(e) => updateTxtDescription(workspace.workspaceId, index, e.target.value)}
@@ -4291,6 +4293,42 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toggleLabel: {
     fontWeight: 800,
+  },
+
+  workspaceTxtSection: {
+    marginTop: 28,
+    paddingTop: 20,
+    borderTop: "1px dashed #d9e7f7",
+  },
+  workspaceTxtHeaderRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 18,
+  },
+  workspaceTxtGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 14,
+    width: "100%",
+    marginBottom: 16,
+  },
+  workspaceTxtCard: {
+    width: "100%",
+  },
+  workspaceTxtTextarea: {
+    width: "100%",
+    minHeight: 84,
+    borderRadius: 14,
+    border: "1px solid #cfdef2",
+    padding: "13px 14px",
+    fontSize: 15,
+    lineHeight: 1.45,
+    outline: "none",
+    background: "#fbfdff",
+    resize: "vertical" as const,
+    boxSizing: "border-box",
   },
   primaryButton: {
     border: "none",
