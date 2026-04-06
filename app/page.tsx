@@ -2014,8 +2014,7 @@ export default function Page() {
           "👀 一看就懂的重點整理，留言告訴我你的看法。",
         ]
           .filter(Boolean)
-          .join("
-");
+          .join("\n");
       }
 
       const hook = normalizeSnippet(rawDescription, 58) || "Quick breakdown with the key point upfront.";
@@ -2025,8 +2024,7 @@ export default function Page() {
         "👀 Watch to the end and tell me if you agree.",
       ]
         .filter(Boolean)
-        .join("
-");
+        .join("\n");
     },
     []
   );
