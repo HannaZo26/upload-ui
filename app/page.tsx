@@ -562,6 +562,10 @@ const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
     return { color: "#15803d", fontWeight: 700 };
   }
 
+  if (normalized === "READY_TO_REFRESH") {
+    return { color: "#b45309", fontWeight: 700 };
+  }
+
   if (normalized === "FAILED") {
     return { color: "#dc2626", fontWeight: 700 };
   }
@@ -573,9 +577,33 @@ const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
   return { color: "#64748b", fontWeight: 700 };
 };
 
+const getDisplayJobStatusLabel = (status?: string) => {
+  const normalized = (status || "").trim().toUpperCase();
+  if (normalized === "READY_TO_REFRESH") {
+    return "Clips ready. Refresh to display.";
+  }
+  return normalized || "-";
+};
+
+const isRecoverableShortsRefreshState = (message: string, status: string) => {
+  const normalizedMessage = (message || "").trim().toLowerCase();
+  const normalizedStatus = (status || "").trim().toUpperCase();
+
+  return (
+    normalizedStatus === "COMPLETED" &&
+    (
+      normalizedMessage.includes("failed to fetch") ||
+      normalizedMessage.includes("network") ||
+      normalizedMessage.includes("load the generated shorts") ||
+      normalizedMessage.includes("no clips were returned") ||
+      normalizedMessage.includes("results")
+    )
+  );
+};
+
 const isTerminalShortsStatus = (status: string) => {
   const normalized = status.trim().toUpperCase();
-  return normalized === "COMPLETED" || normalized === "FAILED";
+  return normalized === "COMPLETED" || normalized === "FAILED" || normalized === "READY_TO_REFRESH";
 };
 
 const readResponseData = async (response: Response) => {
@@ -759,6 +787,7 @@ export default function Page() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+  const [activatedSuccessfully, setActivatedSuccessfully] = useState(false);
 
   const [longUrl, setLongUrl] = useState("");
   const [customSlug, setCustomSlug] = useState("");
@@ -1720,13 +1749,14 @@ export default function Page() {
         ? SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS
         : SHORTSGEN_MAX_POLL_ATTEMPTS;
 
+      let finalStatus = "";
+      let latestProgress: number | null = null;
+
       try {
         updateShortsWorkspace(workspaceId, {
           generatingShorts: true,
           errorMessage: "",
         });
-        let finalStatus = "";
-        let latestProgress: number | null = null;
         let failedStatusGraceCount = 0;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
@@ -1940,11 +1970,24 @@ export default function Page() {
         });
       } catch (err: any) {
         const message = err?.message || "Failed to prepare the shorts preview.";
+        const keepRefreshState = isRecoverableShortsRefreshState(message, finalStatus);
+
         updateShortsWorkspace(workspaceId, (workspace) => ({
           generatingShorts: false,
-          errorMessage: message,
+          errorMessage: keepRefreshState
+            ? tx(
+                "Clips ready. Refresh to display.",
+                "剪輯已完成，請點擊刷新重新載入"
+              )
+            : message,
           successMessage: "",
-          jobStatus: workspace.jobStatus || "FAILED",
+          jobStatus: keepRefreshState ? "READY_TO_REFRESH" : workspace.jobStatus || "FAILED",
+          jobProgress:
+            keepRefreshState && latestProgress !== null
+              ? latestProgress
+              : keepRefreshState
+              ? 100
+              : workspace.jobProgress,
         }));
 
         persistShortsHistoryEntry({
@@ -1954,15 +1997,25 @@ export default function Page() {
           mode,
           rangeStart,
           rangeEnd,
-          status: "FAILED",
-          progress: null,
+          status: keepRefreshState ? "READY_TO_REFRESH" : "FAILED",
+          progress:
+            keepRefreshState && latestProgress !== null
+              ? latestProgress
+              : keepRefreshState
+              ? 100
+              : null,
           clips: [],
           selectedShortIds: [],
           uploadedClipIds: [],
           createdAt,
           updatedAt: Date.now(),
           successMessage: "",
-          errorMessage: message,
+          errorMessage: keepRefreshState
+            ? tx(
+                "Clips ready. Refresh to display.",
+                "剪輯已完成，請點擊刷新重新載入"
+              )
+            : message,
         });
       } finally {
         if (activeShortsMonitorRef.current[workspaceId] === jobId) {
@@ -2916,10 +2969,11 @@ export default function Page() {
 
     try {
       setSubmitting(true);
+      setActivatedSuccessfully(false);
       setSuccess(
         tx(
           "Activating automation... Please keep this page open until Activated successfully appears.",
-          "正在開啟自動化……請保持此頁面開啟，直到出現「自動化已開啟成功」。"
+          "正在開啟自動化……請保持此頁面開啟，直到出現自動化已開啟成功。"
         )
       );
 
@@ -2978,15 +3032,16 @@ export default function Page() {
       setShortUrlSuccess("");
       setShortUrlCopied(false);
       clearSubmittedShortsWorkspaces();
+      setActivatedSuccessfully(true);
       setSuccess(
-        data?.message ||
-          tx(
-            "Activated successfully",
-            "自動化已開啟成功"
-          )
+        tx(
+          "Activated successfully",
+          "自動化已開啟成功"
+        )
       );
       setError("");
     } catch (err: any) {
+      setActivatedSuccessfully(false);
       setError(err?.message || "Failed to activate automation.");
       setSuccess("");
     } finally {
@@ -3368,7 +3423,7 @@ export default function Page() {
                                     {tx("From long-video URL:", "對應長視頻鏈接：")} {item.originalUrl}
                                   </div>
                                 </div>
-                              </div>
+</div>
                             ))}
                           </div>
                         ) : (
@@ -3612,7 +3667,7 @@ export default function Page() {
                                             {entry.sourceUrl || "Untitled job"}
                                           </div>
                                           <div style={styles.helperText}>
-                                            <span style={getHistoryStatusStyle(entry.status)}>{entry.status || "-"}</span>
+                                            <span style={getHistoryStatusStyle(entry.status)}>{getDisplayJobStatusLabel(entry.status) || "-"}</span>
                                             {" · "}
                                             {formatHistoryTimestamp(entry.updatedAt)}
                                           </div>
@@ -3897,7 +3952,7 @@ export default function Page() {
                                     <div style={styles.actionTitle}>{tx("Preview clips", "預覽 clips")}</div>
                                     <div style={styles.shortsPreviewPills}>
                                       {workspace.jobStatus ? (
-                                        <div style={styles.statusPill}>{workspace.jobStatus}</div>
+                                        <div style={styles.statusPill}>{getDisplayJobStatusLabel(workspace.jobStatus)}</div>
                                       ) : null}
                                       {workspace.jobProgress !== null ? (
                                         <div style={styles.progressPill}>{workspace.jobProgress}%</div>
@@ -4236,8 +4291,8 @@ export default function Page() {
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then activate the automation. Please keep this page open until Activated successfully appears.",
-                      "檢查目前摘要後再開啟自動化。請保持此頁面開啟，直到看到「自動化已開啟成功」。"
+                      "Review the current summary, then activate the automation. Please keep this page open until you see Activated successfully.",
+                      "檢查目前摘要後再開啟自動化。請不要關閉此頁面，直到看到 自動化已開啟成功 才算完成。"
                     )}
                   </div>
 
@@ -4293,17 +4348,7 @@ export default function Page() {
                     </button>
                   </div>
 
-                  {success ? (
-                    <div
-                      style={
-                        success === tx("Activated successfully", "自動化已開啟成功")
-                          ? styles.successCelebrationBox
-                          : styles.successBox
-                      }
-                    >
-                      {success}
-                    </div>
-                  ) : null}
+                  {success ? <div style={activatedSuccessfully ? styles.successCelebrationBox : styles.successBox}>{success}</div> : null}
                   {error ? <div style={styles.errorBox}>{error}</div> : null}
                 </section>
               </div>
@@ -4347,7 +4392,7 @@ const styles: Record<string, React.CSSProperties> = {
   logoMark: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: "hidden",
     boxShadow: "0 10px 20px rgba(242, 140, 40, 0.24)",
     flexShrink: 0,
@@ -4411,14 +4456,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stepsStack: {
     display: "grid",
-    gap: 10,
+    gap: 8,
   },
   stepCard: {
     display: "grid",
     gridTemplateColumns: "34px minmax(0, 1fr)",
     gap: 12,
     alignItems: "center",
-    padding: "10px 12px",
+    padding: "8px 10px",
     borderRadius: 16,
     background: "rgba(255,255,255,0.06)",
     border: "1px solid rgba(255,255,255,0.08)",
@@ -4708,7 +4753,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   manualSelectionTip: {
     marginTop: 12,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "12px 14px",
     background: "#ffffff",
     border: "1px dashed #cfe0f5",
@@ -4725,7 +4770,7 @@ const styles: Record<string, React.CSSProperties> = {
   presetChipRow: {
     display: "flex",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
     marginTop: 12,
   },
   presetChip: {
@@ -4745,7 +4790,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   helperBanner: {
     marginBottom: 16,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "12px 14px",
     background: "#eef6ff",
     border: "1px solid #cfe0f5",
@@ -4790,7 +4835,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
@@ -4800,7 +4845,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   inputReadonly: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #d9e4f4",
     padding: "13px 14px",
     fontSize: 15,
@@ -4845,7 +4890,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   select: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
@@ -4856,7 +4901,7 @@ const styles: Record<string, React.CSSProperties> = {
   textareaLarge: {
     width: "100%",
     minHeight: 96,
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
@@ -4868,7 +4913,7 @@ const styles: Record<string, React.CSSProperties> = {
   textareaCompact: {
     width: "100%",
     minHeight: 96,
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
@@ -4878,15 +4923,15 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
   },
   toggleCard: {
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #d9e7f7",
     background: "#ffffff",
-    padding: "10px 12px",
+    padding: "8px 10px",
   },
   toggleRow: {
     display: "inline-flex",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     cursor: "pointer",
     color: "#10233f",
     fontWeight: 700,
@@ -4921,7 +4966,7 @@ const styles: Record<string, React.CSSProperties> = {
   workspaceTxtTextarea: {
     width: "100%",
     minHeight: 84,
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
     padding: "13px 14px",
     fontSize: 15,
@@ -4935,7 +4980,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     background: "linear-gradient(180deg, #ff9a3c 0%, #ea7c16 100%)",
     color: "#fff",
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "14px 18px",
     fontWeight: 800,
     fontSize: 15,
@@ -4946,7 +4991,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #ffd3aa",
     background: "#fff5ea",
     color: "#b86407",
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "12px 16px",
     fontWeight: 700,
     fontSize: 14,
@@ -4986,14 +5031,14 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 12,
     border: "1px solid #dce7f7",
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "8px 10px",
     background: "#ffffff",
   },
   fileRowMain: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     minWidth: 0,
     flex: 1,
   },
@@ -5166,7 +5211,7 @@ const styles: Record<string, React.CSSProperties> = {
   shortsClipCard: {
     display: "grid",
     alignContent: "start",
-    gap: 10,
+    gap: 8,
     border: "1px solid #d8e3f5",
     borderRadius: 20,
     padding: "12px",
@@ -5263,7 +5308,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#ffffff",
     color: "#214a8c",
     borderRadius: 12,
-    padding: "10px 12px",
+    padding: "8px 10px",
     fontWeight: 700,
     fontSize: 12,
     cursor: "pointer",
@@ -5284,27 +5329,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   successBox: {
     marginTop: 16,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "13px 14px",
     background: "#ebfbf1",
     color: "#177245",
     border: "1px solid #b8e8ca",
     fontWeight: 600,
   },
-  successCelebrationBox: {
-    marginTop: 16,
-    borderRadius: 16,
-    padding: "16px 18px",
-    background: "linear-gradient(180deg, #fff6db 0%, #fff1bf 100%)",
-    color: "#9a6700",
-    border: "1px solid #f5d77a",
-    fontWeight: 800,
-    fontSize: 18,
-    boxShadow: "0 12px 24px rgba(245, 183, 0, 0.18)",
-  },
   errorBox: {
     marginTop: 16,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: "13px 14px",
     background: "#fff1f1",
     color: "#b12d2d",
@@ -5332,7 +5366,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#ffffff",
     padding: 14,
     display: "grid",
-    gap: 10,
+    gap: 8,
   },
   shortLinkHistoryList: {
     display: "grid",
@@ -5342,7 +5376,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 12,
     padding: "8px 10px",
     border: "1px solid #e6eef9",
     borderRadius: 12,
