@@ -51,6 +51,10 @@ type ShortsClipOption = {
   rank: number;
 };
 
+type UploadableFile = File & {
+  originalTitle?: string;
+};
+
 type ShortsGenerationMode = "aiClipping" | "manualSelected";
 
 type SavedShortsHistoryEntry = {
@@ -558,8 +562,8 @@ const getSequentialIndexFromName = (
 };
 
 const appendGeneratedFiles = (
-  existingFiles: File[],
-  incomingFiles: File[],
+  existingFiles: UploadableFile[],
+  incomingFiles: UploadableFile[],
   extension: "mp4" | "txt"
 ) => {
   const highestIndex = existingFiles.reduce((max, file) => {
@@ -569,10 +573,16 @@ const appendGeneratedFiles = (
 
   const renamedFiles = incomingFiles.map((file, index) => {
     const nextIndex = highestIndex + index;
-    return new File([file], buildSequentialFileName(nextIndex, extension), {
+    const renamedFile = new File([file], buildSequentialFileName(nextIndex, extension), {
       type: file.type,
       lastModified: file.lastModified || Date.now(),
-    });
+    }) as UploadableFile;
+
+    if (file.originalTitle) {
+      renamedFile.originalTitle = file.originalTitle;
+    }
+
+    return renamedFile;
   });
 
   return [...existingFiles, ...renamedFiles];
@@ -701,7 +711,7 @@ export default function Page() {
   const [pageName, setPageName] = useState("");
 
 
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<UploadableFile[]>([]);
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
   const [txtPreviewSnippets, setTxtPreviewSnippets] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -2002,29 +2012,69 @@ export default function Page() {
         if (!compact) return "";
         return compact.length > limit ? `${compact.slice(0, limit).trim()}…` : compact;
       };
+      const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
       if (hasChinese) {
-        const hook = normalizeSnippet(rawDescription, 26) || "關鍵資訊一次看懂，先收藏再分享。";
-        const cta = /[!?！？]$/.test(rawTitle)
-          ? `🔥 ${normalizeSnippet(rawTitle, 22)}`
-          : `🔥 ${normalizeSnippet(rawTitle, 22)}！`;
-        return [
-          cta,
-          `⚡ ${hook}`,
-          "👀 一看就懂的重點整理，留言告訴我你的看法。",
-        ]
-          .filter(Boolean)
-          .join("\n");
+        const titleCore = normalizeSnippet(rawTitle.replace(/[！!？?]+$/g, ""), 28) || "這段真的值得看完";
+        const descCore = normalizeSnippet(rawDescription, 44);
+        const hooks = [
+          `原來${titleCore}背後真正的關鍵在這裡`,
+          `看到這段才知道，${titleCore}不是表面看起來那麼簡單`,
+          `${titleCore}這件事，很多人其實一直都理解錯了`,
+          `如果你也在關注${titleCore}，這段內容很值得你看到最後`,
+        ];
+        const endings = [
+          "看完會更明白整件事的脈絡。",
+          "這段講得比想像中還清楚。",
+          "越往後看，重點越完整。",
+          "難怪這段內容特別多人想轉發。",
+        ];
+        const details = descCore
+          ? [
+              `重點其實就在：${descCore}`,
+              `裡面把最容易被忽略的部分講得很直接：${descCore}`,
+              `最抓人的地方是，它把核心原因說得很白：${descCore}`,
+            ]
+          : ["裡面的重點整理得很順，一看就能抓到核心。", "不是空話，是把真正的重點直接講清楚了。"];
+        const variants = [
+          `${pick(hooks)}，${pick(details)}`,
+          `${pick(hooks)}。${pick(details)}`,
+          `${pick(details)}，${pick(endings)}`,
+          `${pick(hooks)}，${pick(endings)}`,
+        ];
+        return pick(variants);
       }
 
-      const hook = normalizeSnippet(rawDescription, 58) || "Quick breakdown with the key point upfront.";
-      return [
-        `🔥 ${normalizeSnippet(rawTitle, 40)}`,
-        `⚡ ${hook}`,
-        "👀 Watch to the end and tell me if you agree.",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      const titleCore = normalizeSnippet(rawTitle.replace(/[!?]+$/g, ""), 52) || "this topic";
+      const descCore = normalizeSnippet(rawDescription, 90);
+      const hooks = [
+        `The real reason behind ${titleCore} is more surprising than most people expect`,
+        `If you've seen clips about ${titleCore}, this is the part people usually leave out`,
+        `${titleCore} makes a lot more sense once you hear this explained clearly`,
+        `This breakdown on ${titleCore} is exactly why people keep watching to the end`,
+      ];
+      const details = descCore
+        ? [
+            `The strongest part is how clearly it lays out this point: ${descCore}`,
+            `What makes this clip worth watching is that it gets straight to the core: ${descCore}`,
+            `It turns a complicated point into something easy to follow: ${descCore}`,
+          ]
+        : [
+            "It feels natural, clear, and genuinely worth watching through.",
+            "It gets to the point fast without sounding forced.",
+          ];
+      const endings = [
+        "Watch through before you decide what you think.",
+        "This is the kind of clip that makes people stop scrolling.",
+        "It is much more interesting once the full point clicks.",
+      ];
+      const variants = [
+        `${pick(hooks)}. ${pick(details)}`,
+        `${pick(hooks)} — ${pick(endings)}`,
+        `${pick(details)} ${pick(endings)}`,
+        `${pick(hooks)}. ${pick(endings)}`,
+      ];
+      return pick(variants);
     },
     []
   );
@@ -2256,11 +2306,13 @@ export default function Page() {
             blob = await res.blob();
           }
           const fileName = buildSequentialFileName(index, "mp4");
-
-          return new File([blob], fileName, {
+          const generatedFile = new File([blob], fileName, {
             type: blob.type || "video/mp4",
             lastModified: Date.now(),
-          });
+          }) as UploadableFile;
+          generatedFile.originalTitle = clip.title;
+
+          return generatedFile;
         })
       );
 
@@ -3787,6 +3839,7 @@ export default function Page() {
                             <div>
                               <div style={styles.fileName}>
                                 {file.name}
+                                {isVideoFile && file.originalTitle ? ` — ${file.originalTitle}` : ""}
                                 {isTxtFile && txtSnippet ? ` — ${txtSnippet}` : ""}
                               </div>
                               <div style={styles.fileMeta}>
