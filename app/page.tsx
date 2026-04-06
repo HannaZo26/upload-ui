@@ -1847,9 +1847,7 @@ export default function Page() {
     title: string,
     description: string
   ) => {
-    const combined = [title.trim(), description.trim()].filter(Boolean).join("
-
-");
+    const combined = [title.trim(), description.trim()].filter(Boolean).join("\n\n");
 
     if (!combined) {
       updateShortsWorkspace(workspaceId, {
