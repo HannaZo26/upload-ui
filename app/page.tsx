@@ -793,7 +793,7 @@ export default function Page() {
 
       if (cancelled) return;
       setTxtPreviewSnippets(
-        Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry)))
+        Object.fromEntries(entries.filter(Boolean) as Array<[string, string]>)
       );
     };
 
