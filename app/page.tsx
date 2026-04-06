@@ -508,6 +508,24 @@ const formatHistoryTimestamp = (timestamp: number) => {
   }
 };
 
+const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
+  const normalized = (status || "").trim().toUpperCase();
+
+  if (normalized === "COMPLETED") {
+    return { color: "#15803d", fontWeight: 700 };
+  }
+
+  if (normalized === "FAILED") {
+    return { color: "#dc2626", fontWeight: 700 };
+  }
+
+  if (normalized === "IN_PROGRESS" || normalized === "SCHEDULED") {
+    return { color: "#b45309", fontWeight: 700 };
+  }
+
+  return { color: "#64748b", fontWeight: 700 };
+};
+
 const isTerminalShortsStatus = (status: string) => {
   const normalized = status.trim().toUpperCase();
   return normalized === "COMPLETED" || normalized === "FAILED";
