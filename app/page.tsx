@@ -734,6 +734,8 @@ export default function Page() {
   const [files, setFiles] = useState<UploadableFile[]>([]);
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
   const [txtPreviewSnippets, setTxtPreviewSnippets] = useState<Record<string, string>>({});
+  const [editingTxtIndex, setEditingTxtIndex] = useState<number | null>(null);
+  const [editingTxtDraft, setEditingTxtDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -898,7 +900,7 @@ export default function Page() {
     : "";
 
   const workspaceUiStorageKey = currentUser
-    ? `ucreator-console-workspace-ui:${currentUser.username}`
+    ? buildWorkspaceUiStorageKey(currentUser.username)
     : "";
   const activeShortsWorkspace = useMemo(
     () =>
@@ -1451,7 +1453,7 @@ export default function Page() {
 
   const handleLogout = () => {
     if (currentUser) {
-      removeStoredJson(`ucreator-console-workspace-ui:${currentUser.username}`);
+      removeStoredJson(buildWorkspaceUiStorageKey(currentUser.username));
     }
     removeStoredJson(SESSION_STORAGE_KEY);
     setCurrentUser(null);
@@ -1517,31 +1519,40 @@ export default function Page() {
 
     try {
       const currentContent = await targetFile.text();
-      const nextContent = window.prompt(
-        lang === "zh" ? "修改 TXT 內容：" : "Edit TXT content:",
-        currentContent
-      );
-
-      if (nextContent === null) return;
-
-      const updatedFile = new File(["﻿" + nextContent], targetFile.name, {
-        type: "text/plain;charset=utf-8",
-        lastModified: Date.now(),
-      }) as UploadableFile;
-
-      if (targetFile.originalTitle) {
-        updatedFile.originalTitle = targetFile.originalTitle;
-      }
-
-      setFiles((prev) =>
-        prev.map((file, fileIndex) => (fileIndex === index ? updatedFile : file))
-      );
+      setEditingTxtIndex(index);
+      setEditingTxtDraft(currentContent.replace(/^﻿/, ""));
     } catch (err) {
       setError(
         lang === "zh" ? "TXT 文件暫時無法編輯，請稍後再試。" : "Unable to edit this TXT file right now."
       );
       setSuccess("");
     }
+  };
+
+  const saveEditedTxtFile = () => {
+    if (editingTxtIndex === null) return;
+    const targetFile = files[editingTxtIndex];
+    if (!targetFile) return;
+
+    const updatedFile = new File(["﻿" + editingTxtDraft], targetFile.name, {
+      type: "text/plain;charset=utf-8",
+      lastModified: Date.now(),
+    }) as UploadableFile;
+
+    if (targetFile.originalTitle) {
+      updatedFile.originalTitle = targetFile.originalTitle;
+    }
+
+    setFiles((prev) =>
+      prev.map((file, fileIndex) => (fileIndex === editingTxtIndex ? updatedFile : file))
+    );
+    setEditingTxtIndex(null);
+    setEditingTxtDraft("");
+  };
+
+  const cancelEditedTxtFile = () => {
+    setEditingTxtIndex(null);
+    setEditingTxtDraft("");
   };
 
   const handlePageChange = (value: string) => {
@@ -2154,12 +2165,12 @@ export default function Page() {
         const titleCore = normalizeSnippet(rawTitle.replace(/[！!？?]+$/g, ""), 24) || "這段內容的核心重點";
         const descCore = normalizeSnippet(rawDescription, 38);
         const angles = [
-          `${titleCore}的重點，這支短片一次講清楚`,
-          `關於${titleCore}，真正值得看的就是這個核心`,
-          `${titleCore}為什麼會引起這麼多討論，這段講得很明白`,
-          `如果你想快速看懂${titleCore}，先看這一段就夠了`,
-          `${titleCore}背後最關鍵的脈絡，這裡直接點出來了`,
-          `這支短片把${titleCore}說得很直白，也更容易看懂`,
+          `${titleCore}，這支短片直接把重點講清楚`,
+          `想快速弄懂${titleCore}，看這支短片就夠了`,
+          `${titleCore}最值得注意的地方，這裡說得很明白`,
+          `這支短片把${titleCore}的核心直接講出來了`,
+          `關於${titleCore}，這段內容是最容易看懂的一版`,
+          `${titleCore}到底在講什麼，這支短片直接進入主題`,
         ];
         const supports = descCore
           ? [
@@ -3087,24 +3098,26 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 2</div>
-                      <div style={styles.panelTitle}>{tx("Short link generator", "短連結生成器")}</div>
+                      <div style={styles.panelTitle}>{tx("Short link generator", "短鏈接生成器")}</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Enter the original URL, choose the project, review the UTM values,
-                    then generate the short link.
+                    {tx(
+                      "Paste a Gan Jing World long-video URL, choose the project, review the UTM values, then generate the short link.",
+                      "請貼上來自乾淨世界（Gan Jing World）的長視頻鏈接，選擇 project，檢查 UTM 參數後再生成短鏈接。"
+                    )}
                   </div>
 
                   <div style={okurlStepGridStyle}>
                     <div style={styles.formStack}>
                       <div>
-                        <label style={styles.label}>Original URL</label>
+                        <label style={styles.label}>{tx("Long-video URL", "長視頻鏈接")}</label>
                         <input
                           style={styles.input}
                           value={longUrl}
                           onChange={(e) => setLongUrl(e.target.value)}
-                          placeholder="Paste the long URL here"
+                          placeholder={tx("Paste the Gan Jing World long-video URL here", "請貼上來自乾淨世界的長視頻鏈接")}
                         />
                       </div>
 
@@ -3208,11 +3221,11 @@ export default function Page() {
                         </div>
                       </div>
 
-                      <div style={styles.formStack}>
+                      <div style={{ ...styles.formStack, gap: 10 }}>
                         <div>
                           <label style={styles.label}>UTM Template</label>
                           <select
-                            style={styles.compactSelect}
+                            style={{ ...styles.compactSelect, minHeight: 44, padding: "10px 14px" }}
                             value={selectedUtmTemplateKey}
                             onChange={(e) => handleUtmTemplateChange(e.target.value)}
                           >
@@ -3233,7 +3246,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Source</label>
                             <input
-                              style={styles.compactInput}
+                              style={{ ...styles.compactInput, minHeight: 44, padding: "10px 14px" }}
                               value={utmFields.source}
                               onChange={(e) => updateUtmField("source", e.target.value)}
                               placeholder="mkg"
@@ -3243,7 +3256,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Medium</label>
                             <input
-                              style={styles.compactInput}
+                              style={{ ...styles.compactInput, minHeight: 44, padding: "10px 14px" }}
                               value={utmFields.medium}
                               onChange={(e) => updateUtmField("medium", e.target.value)}
                               placeholder="video"
@@ -3253,7 +3266,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Campaign</label>
                             <input
-                              style={styles.compactInput}
+                              style={{ ...styles.compactInput, minHeight: 44, padding: "10px 14px" }}
                               value={utmFields.campaign}
                               onChange={(e) => updateUtmField("campaign", e.target.value)}
                               placeholder="campaign-name"
@@ -3263,7 +3276,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Term</label>
                             <input
-                              style={styles.compactInput}
+                              style={{ ...styles.compactInput, minHeight: 44, padding: "10px 14px" }}
                               value={utmFields.term}
                               onChange={(e) => updateUtmField("term", e.target.value)}
                               placeholder="news"
@@ -3273,7 +3286,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Content</label>
                             <input
-                              style={styles.compactInput}
+                              style={{ ...styles.compactInput, minHeight: 44, padding: "10px 14px" }}
                               value={utmFields.content}
                               onChange={(e) => updateUtmField("content", e.target.value)}
                               placeholder="reels"
@@ -3283,7 +3296,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Source Platform</label>
                             <input
-                              style={styles.compactInput}
+                              style={{ ...styles.compactInput, minHeight: 44, padding: "10px 14px" }}
                               value={utmFields.sourcePlatform}
                               onChange={(e) =>
                                 updateUtmField("sourcePlatform", e.target.value)
@@ -3299,7 +3312,8 @@ export default function Page() {
                             rows={2}
                             style={{
                               ...styles.compactTextarea,
-                              minHeight: 52,
+                              minHeight: 44,
+                              padding: "10px 14px",
                               background: "#f3f6fb",
                             }}
                             value={longUrlWithUtm}
@@ -3308,7 +3322,7 @@ export default function Page() {
                           />
                         </div>
 
-                        <div style={styles.toggleCard}>
+                        <div style={{ ...styles.toggleCard, padding: "12px 16px" }}>
                           <label style={styles.toggleRow}>
                             <input
                               type="checkbox"
@@ -3992,22 +4006,51 @@ export default function Page() {
                             </div>
                           </div>
                           <div style={styles.fileRowActions}>
-                            {isTxtFile ? (
-                              <button
-                                type="button"
-                                style={secondaryButtonStyle}
-                                onClick={() => void editTxtFile(idx)}
-                              >
-                                {tx("Edit", "編輯")}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              style={secondaryButtonStyle}
-                              onClick={() => removeFile(idx)}
-                            >
-                              Remove
-                            </button>
+                            {isTxtFile && editingTxtIndex === idx ? (
+                              <div style={{ display: "grid", gap: 8, width: "min(420px, 100%)" }}>
+                                <textarea
+                                  rows={4}
+                                  style={{ ...styles.compactTextarea, minHeight: 88, width: "100%" }}
+                                  value={editingTxtDraft}
+                                  onChange={(e) => setEditingTxtDraft(e.target.value)}
+                                />
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                  <button
+                                    type="button"
+                                    style={secondaryButtonStyle}
+                                    onClick={cancelEditedTxtFile}
+                                  >
+                                    {tx("Cancel", "取消")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={secondaryButtonStyle}
+                                    onClick={saveEditedTxtFile}
+                                  >
+                                    {tx("Save", "保存")}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {isTxtFile ? (
+                                  <button
+                                    type="button"
+                                    style={secondaryButtonStyle}
+                                    onClick={() => void editTxtFile(idx)}
+                                  >
+                                    {tx("Edit", "編輯")}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  style={secondaryButtonStyle}
+                                  onClick={() => removeFile(idx)}
+                                >
+                                  {tx("Remove", "移除")}
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       );
@@ -4024,7 +4067,10 @@ export default function Page() {
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Review the current summary, then start the automation.
+                    {tx(
+                      "Review the current summary, then start the automation. Please keep this page open until you see Upload successful.",
+                      "檢查目前摘要後再開始自動化。請不要關閉此頁面，直到看到 Upload successful 才算完成。"
+                    )}
                   </div>
 
                   <div style={styles.summaryCard}>
