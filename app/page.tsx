@@ -1163,6 +1163,18 @@ export default function Page() {
   }, [lang]);
 
   useEffect(() => {
+    if (!submitting) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [submitting]);
+
+  useEffect(() => {
     if (!pageName || !okurlProjects.length) return;
 
     const matched =
@@ -1865,7 +1877,7 @@ export default function Page() {
     title: string,
     description: string
   ) => {
-    const combined = [title.trim(), description.trim()].filter(Boolean).join("\n\n");
+    const combined = [title.trim(), description.trim()].filter(Boolean).join("\n");
 
     if (!combined) {
       updateShortsWorkspace(workspaceId, {
@@ -2381,6 +2393,12 @@ export default function Page() {
 
     try {
       setSubmitting(true);
+      setSuccess(
+        tx(
+          "Starting automation... Please keep this page open until Upload successful appears.",
+          "正在開始自動化……請保持此頁面開啟，直到出現上傳成功提示。"
+        )
+      );
 
       const formData = new FormData();
       formData.append("username", currentUser.username);
@@ -2506,7 +2524,13 @@ export default function Page() {
                 type="button"
                 style={{
                   ...styles.secondaryButton,
-                  ...(lang === "en" ? { borderColor: "#f29a3f", color: "#c77416" } : null),
+                  ...(lang === "en"
+                    ? {
+                        borderColor: "#9fd7b5",
+                        background: "#eaf8ef",
+                        color: "#1f8f4e",
+                      }
+                    : null),
                 }}
                 onClick={() => setLang("en")}
               >
@@ -2516,7 +2540,13 @@ export default function Page() {
                 type="button"
                 style={{
                   ...styles.secondaryButton,
-                  ...(lang === "zh" ? { borderColor: "#f29a3f", color: "#c77416" } : null),
+                  ...(lang === "zh"
+                    ? {
+                        borderColor: "#9fd7b5",
+                        background: "#eaf8ef",
+                        color: "#1f8f4e",
+                      }
+                    : null),
                 }}
                 onClick={() => setLang("zh")}
               >
@@ -2753,7 +2783,7 @@ export default function Page() {
                         <div>
                           <label style={styles.label}>UTM Template</label>
                           <select
-                            style={styles.select}
+                            style={styles.compactSelect}
                             value={selectedUtmTemplateKey}
                             onChange={(e) => handleUtmTemplateChange(e.target.value)}
                           >
@@ -2774,7 +2804,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Source</label>
                             <input
-                              style={styles.input}
+                              style={styles.compactInput}
                               value={utmFields.source}
                               onChange={(e) => updateUtmField("source", e.target.value)}
                               placeholder="mkg"
@@ -2784,7 +2814,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Medium</label>
                             <input
-                              style={styles.input}
+                              style={styles.compactInput}
                               value={utmFields.medium}
                               onChange={(e) => updateUtmField("medium", e.target.value)}
                               placeholder="video"
@@ -2794,7 +2824,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Campaign</label>
                             <input
-                              style={styles.input}
+                              style={styles.compactInput}
                               value={utmFields.campaign}
                               onChange={(e) => updateUtmField("campaign", e.target.value)}
                               placeholder="campaign-name"
@@ -2804,7 +2834,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Term</label>
                             <input
-                              style={styles.input}
+                              style={styles.compactInput}
                               value={utmFields.term}
                               onChange={(e) => updateUtmField("term", e.target.value)}
                               placeholder="news"
@@ -2814,7 +2844,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Content</label>
                             <input
-                              style={styles.input}
+                              style={styles.compactInput}
                               value={utmFields.content}
                               onChange={(e) => updateUtmField("content", e.target.value)}
                               placeholder="reels"
@@ -2824,7 +2854,7 @@ export default function Page() {
                           <div>
                             <label style={styles.label}>Source Platform</label>
                             <input
-                              style={styles.input}
+                              style={styles.compactInput}
                               value={utmFields.sourcePlatform}
                               onChange={(e) =>
                                 updateUtmField("sourcePlatform", e.target.value)
@@ -2839,8 +2869,8 @@ export default function Page() {
                           <textarea
                             rows={2}
                             style={{
-                              ...styles.textareaLarge,
-                              minHeight: 68,
+                              ...styles.compactTextarea,
+                              minHeight: 58,
                               background: "#f3f6fb",
                             }}
                             value={longUrlWithUtm}
@@ -4076,6 +4106,40 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     background: "#f3f7fd",
     color: "#4b5b72",
+    boxSizing: "border-box",
+  },
+  compactInput: {
+    width: "100%",
+    borderRadius: 14,
+    border: "1px solid #cfdef2",
+    padding: "10px 12px",
+    fontSize: 14,
+    lineHeight: 1.25,
+    outline: "none",
+    background: "#fbfdff",
+    boxSizing: "border-box",
+  },
+  compactSelect: {
+    width: "100%",
+    borderRadius: 14,
+    border: "1px solid #cfdef2",
+    padding: "10px 12px",
+    fontSize: 14,
+    lineHeight: 1.25,
+    outline: "none",
+    background: "#fbfdff",
+    boxSizing: "border-box",
+  },
+  compactTextarea: {
+    width: "100%",
+    minHeight: 58,
+    borderRadius: 14,
+    border: "1px solid #cfdef2",
+    padding: "10px 12px",
+    fontSize: 14,
+    lineHeight: 1.4,
+    outline: "none",
+    resize: "vertical" as const,
     boxSizing: "border-box",
   },
   select: {
