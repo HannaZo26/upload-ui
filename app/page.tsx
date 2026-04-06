@@ -545,6 +545,35 @@ const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
   return `video${index + 1}.${extension}`;
 };
 
+const getSequentialIndexFromName = (
+  fileName: string,
+  extension: "mp4" | "txt"
+) => {
+  const match = fileName.match(new RegExp(`^video(\\d+)\\.${extension}$`, "i"));
+  return match ? Number(match[1]) : null;
+};
+
+const appendGeneratedFiles = (
+  existingFiles: File[],
+  incomingFiles: File[],
+  extension: "mp4" | "txt"
+) => {
+  const highestIndex = existingFiles.reduce((max, file) => {
+    const currentIndex = getSequentialIndexFromName(file.name, extension);
+    return currentIndex && currentIndex > max ? currentIndex : max;
+  }, 0);
+
+  const renamedFiles = incomingFiles.map((file, index) => {
+    const nextIndex = highestIndex + index;
+    return new File([file], buildSequentialFileName(nextIndex, extension), {
+      type: file.type,
+      lastModified: file.lastModified || Date.now(),
+    });
+  });
+
+  return [...existingFiles, ...renamedFiles];
+};
+
 const readDownloadFileName = (contentDisposition: string | null) => {
   if (!contentDisposition) return "";
 
@@ -616,15 +645,6 @@ const formatSecondsAsTimecode = (totalSeconds: number) => {
     .join(":");
 };
 
-const replaceGeneratedFiles = (
-  existingFiles: File[],
-  incomingFiles: File[],
-  matcher: RegExp
-) => {
-  const preserved = existingFiles.filter((file) => !matcher.test(file.name));
-  return [...preserved, ...incomingFiles];
-};
-
 const createInitialShortsWorkspaceState = (
   workspaceId: string,
   title: string
@@ -676,6 +696,8 @@ export default function Page() {
   );
 
   const [files, setFiles] = useState<File[]>([]);
+  const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
+  const [txtPreviewSnippets, setTxtPreviewSnippets] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -721,6 +743,65 @@ export default function Page() {
   const totalSizeMb = useMemo(() => {
     const total = files.reduce((sum, file) => sum + file.size, 0);
     return (total / 1024 / 1024).toFixed(2);
+  }, [files]);
+
+  useEffect(() => {
+    const nextUrls: Record<string, string> = {};
+    const createdUrls: string[] = [];
+
+    files.forEach((file, index) => {
+      if (file.type.startsWith("video/") || /\.mp4$/i.test(file.name)) {
+        const key = `${file.name}-${file.size}-${file.lastModified}-${index}`;
+        const objectUrl = URL.createObjectURL(file);
+        nextUrls[key] = objectUrl;
+        createdUrls.push(objectUrl);
+      }
+    });
+
+    setFilePreviewUrls(nextUrls);
+
+    return () => {
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [files]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const readTxtPreviews = async () => {
+      const entries = await Promise.all(
+        files.map(async (file, index) => {
+          if (!(file.type.startsWith("text/") || /\.txt$/i.test(file.name))) {
+            return null;
+          }
+
+          try {
+            const content = await file.text();
+            const compact = content.replace(/\s+/g, " ").trim();
+            return [
+              `${file.name}-${file.size}-${file.lastModified}-${index}`,
+              compact.slice(0, 80) || "TXT file",
+            ] as const;
+          } catch {
+            return [
+              `${file.name}-${file.size}-${file.lastModified}-${index}`,
+              "TXT file",
+            ] as const;
+          }
+        })
+      );
+
+      if (cancelled) return;
+      setTxtPreviewSnippets(
+        Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry)))
+      );
+    };
+
+    void readTxtPreviews();
+
+    return () => {
+      cancelled = true;
+    };
   }, [files]);
 
   const selectedProject = useMemo(() => {
@@ -2100,9 +2181,7 @@ export default function Page() {
         })
       );
 
-      setFiles((prev) =>
-        replaceGeneratedFiles(prev, fetchedFiles, /^video\d+\.mp4$/i)
-      );
+      setFiles((prev) => appendGeneratedFiles(prev, fetchedFiles, "mp4"));
 
       const uploadedIds = [...workspace.selectedShortIds];
 
@@ -2193,9 +2272,7 @@ export default function Page() {
           })
       );
 
-      setFiles((prev) =>
-        replaceGeneratedFiles(prev, generatedTxtFiles, /^video\d+\.txt$/i)
-      );
+      setFiles((prev) => appendGeneratedFiles(prev, generatedTxtFiles, "txt"));
 
       setTxtsAddedToUploads(true);
       window.setTimeout(() => {
@@ -3518,23 +3595,48 @@ export default function Page() {
                   </div>
 
                   <div style={styles.fileList}>
-                    {files.map((file, idx) => (
-                      <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
-                        <div>
-                          <div style={styles.fileName}>{file.name}</div>
-                          <div style={styles.fileMeta}>
-                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                    {files.map((file, idx) => {
+                      const previewKey = `${file.name}-${file.size}-${file.lastModified}-${idx}`;
+                      const videoPreviewUrl = filePreviewUrls[previewKey];
+                      const txtSnippet = txtPreviewSnippets[previewKey];
+                      const isVideoFile = Boolean(videoPreviewUrl);
+                      const isTxtFile = file.type.startsWith("text/") || /\.txt$/i.test(file.name);
+
+                      return (
+                        <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
+                          <div style={styles.fileRowMain}>
+                            <div style={styles.filePreviewBox}>
+                              {isVideoFile ? (
+                                <video
+                                  src={videoPreviewUrl}
+                                  style={styles.filePreviewVideo}
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                />
+                              ) : isTxtFile ? (
+                                <div style={styles.filePreviewText}>{txtSnippet || "TXT"}</div>
+                              ) : (
+                                <div style={styles.filePreviewText}>FILE</div>
+                              )}
+                            </div>
+                            <div>
+                              <div style={styles.fileName}>{file.name}</div>
+                              <div style={styles.fileMeta}>
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                              </div>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            style={styles.secondaryButton}
+                            onClick={() => removeFile(idx)}
+                          >
+                            Remove
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          style={styles.secondaryButton}
-                          onClick={() => removeFile(idx)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
 
