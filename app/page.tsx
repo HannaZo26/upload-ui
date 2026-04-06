@@ -106,9 +106,12 @@ const TXT_BOX_COUNT = 5;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 120;
 const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 360;
 const SHORTSGEN_RESULTS_RETRY_DELAY_MS = 2000;
-const SHORTSGEN_RESULTS_MAX_RETRIES = 10;
-const SHORTSGEN_CREATE_MAX_RETRIES = 2;
-const SHORTSGEN_FAILED_STATUS_GRACE_POLLS = 3;
+const SHORTSGEN_RESULTS_MAX_RETRIES = 14;
+const SHORTSGEN_CREATE_MAX_RETRIES = 4;
+const SHORTSGEN_FAILED_STATUS_GRACE_POLLS = 6;
+const SHORTSGEN_STATUS_FETCH_MAX_RETRIES = 3;
+const SHORTSGEN_FAILED_CONFIRMATION_CHECKS = 2;
+const SHORTSGEN_FAILED_CONFIRMATION_DELAY_MS = 4000;
 const SHORTS_RANGE_PRESETS = [
   { label: "Full video", start: "", end: "" },
   { label: "First 2 min", start: "00:00", end: "02:00" },
@@ -520,10 +523,17 @@ const isRetryableShortsMessage = (value: string) => {
     normalized.includes("network") ||
     normalized.includes("fetch failed") ||
     normalized.includes("empty") ||
-    normalized.includes("no clips")
+    normalized.includes("no clips") ||
+    normalized.includes("again later") ||
+    normalized.includes("try again") ||
+    normalized.includes("please wait")
   );
 };
 
+const isSoftFailedShortsStatus = (status: string, message: string) => {
+  if (status !== "FAILED") return false;
+  return !message || isRetryableShortsMessage(message);
+};
 
 const formatHistoryTimestamp = (timestamp: number) => {
   if (!timestamp) return "";
@@ -1679,17 +1689,40 @@ export default function Page() {
         let failedStatusGraceCount = 0;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
-          const statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
-            cache: "no-store",
-          });
-          const statusData = await readResponseData(statusRes);
+          let statusRes: Response | null = null;
+          let statusData: any = null;
+          let lastStatusError = "";
 
-          if (!statusRes.ok) {
-            throw new Error(
-              statusData?.error ||
+          for (let statusAttempt = 0; statusAttempt < SHORTSGEN_STATUS_FETCH_MAX_RETRIES; statusAttempt += 1) {
+            try {
+              statusRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
+                cache: "no-store",
+              });
+              statusData = await readResponseData(statusRes);
+
+              if (statusRes.ok) {
+                break;
+              }
+
+              lastStatusError =
+                statusData?.error ||
                 statusData?.message ||
-                "Failed to check ShortsGen job status."
-            );
+                "Failed to check ShortsGen job status.";
+            } catch (statusError: any) {
+              lastStatusError = statusError?.message || "Failed to check ShortsGen job status.";
+            }
+
+            if (statusAttempt < SHORTSGEN_STATUS_FETCH_MAX_RETRIES - 1) {
+              await sleep(1200 * (statusAttempt + 1));
+            }
+          }
+
+          if (!statusRes || !statusRes.ok) {
+            if (isRetryableShortsMessage(lastStatusError) && attempt < maxPollAttempts - 1) {
+              await sleep(getPollDelayMs(attempt));
+              continue;
+            }
+            throw new Error(lastStatusError || "Failed to check ShortsGen job status.");
           }
 
           finalStatus = pickFirstString(statusData?.status).toUpperCase();
@@ -1741,9 +1774,67 @@ export default function Page() {
               statusData?.message ||
               statusData?.upstream?.message ||
               "";
+            const softFailed = isSoftFailedShortsStatus(finalStatus, failedMessage);
+
+            for (let confirmAttempt = 0; confirmAttempt < SHORTSGEN_FAILED_CONFIRMATION_CHECKS; confirmAttempt += 1) {
+              await sleep(SHORTSGEN_FAILED_CONFIRMATION_DELAY_MS);
+              try {
+                const confirmRes = await fetch(`/api/shortsgen/jobs/${encodeURIComponent(jobId)}`, {
+                  cache: "no-store",
+                });
+                const confirmData = await readResponseData(confirmRes);
+                if (!confirmRes.ok) {
+                  continue;
+                }
+                const confirmStatus = pickFirstString(confirmData?.status).toUpperCase();
+                const confirmProgressRaw =
+                  typeof confirmData?.progress === "number" || typeof confirmData?.progress === "string"
+                    ? Number(confirmData.progress)
+                    : null;
+                const confirmProgress =
+                  confirmProgressRaw !== null && Number.isFinite(confirmProgressRaw)
+                    ? Math.max(0, Math.min(100, Math.round(confirmProgressRaw)))
+                    : latestProgress;
+
+                if (confirmStatus === "COMPLETED") {
+                  finalStatus = "COMPLETED";
+                  latestProgress = 100;
+                  updateShortsWorkspace(workspaceId, {
+                    jobStatus: "COMPLETED",
+                    jobProgress: 100,
+                    generatingShorts: false,
+                    errorMessage: "",
+                  });
+                  break;
+                }
+
+                if (confirmStatus && confirmStatus !== "FAILED") {
+                  finalStatus = confirmStatus;
+                  latestProgress = confirmProgress;
+                  updateShortsWorkspace(workspaceId, {
+                    jobStatus: confirmStatus,
+                    jobProgress: confirmProgress,
+                    generatingShorts: true,
+                    errorMessage: "",
+                  });
+                  break;
+                }
+              } catch {
+                // ignore and keep confirming
+              }
+            }
+
+            if (finalStatus === "COMPLETED") {
+              break;
+            }
+
+            if (finalStatus !== "FAILED") {
+              await sleep(getPollDelayMs(attempt));
+              continue;
+            }
+
             const allowGracePolling =
-              failedStatusGraceCount < SHORTSGEN_FAILED_STATUS_GRACE_POLLS &&
-              (!failedMessage || isRetryableShortsMessage(failedMessage));
+              failedStatusGraceCount < SHORTSGEN_FAILED_STATUS_GRACE_POLLS && softFailed;
 
             if (allowGracePolling) {
               failedStatusGraceCount += 1;
@@ -3844,7 +3935,7 @@ export default function Page() {
                                                 </button>
                                                 <button
                                                   type="button"
-                                                  style={{ ...styles.miniActionButton, marginTop: 8 }}
+                                                  style={styles.miniActionButton}
                                                   onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
@@ -3994,7 +4085,7 @@ export default function Page() {
                                 <div style={styles.filePreviewText}>FILE</div>
                               )}
                             </div>
-                            <div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={styles.fileName}>
                                 {file.name}
                                 {isVideoFile && file.originalTitle ? ` — ${file.originalTitle}` : ""}
@@ -4003,54 +4094,51 @@ export default function Page() {
                               <div style={styles.fileMeta}>
                                 {(file.size / 1024 / 1024).toFixed(2)} MB
                               </div>
+                              {isTxtFile && editingTxtIndex === idx ? (
+                                <div style={{ display: "grid", gap: 8, marginTop: 10, maxWidth: 760 }}>
+                                  <textarea
+                                    rows={5}
+                                    style={{ ...styles.compactTextarea, minHeight: 112, width: "100%", maxWidth: 760 }}
+                                    value={editingTxtDraft}
+                                    onChange={(e) => setEditingTxtDraft(e.target.value)}
+                                  />
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                    <button
+                                      type="button"
+                                      style={secondaryButtonStyle}
+                                      onClick={cancelEditedTxtFile}
+                                    >
+                                      {tx("Cancel", "取消")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      style={secondaryButtonStyle}
+                                      onClick={saveEditedTxtFile}
+                                    >
+                                      {tx("Save", "保存")}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                           <div style={styles.fileRowActions}>
-                            {isTxtFile && editingTxtIndex === idx ? (
-                              <div style={{ display: "grid", gap: 8, width: "min(420px, 100%)" }}>
-                                <textarea
-                                  rows={4}
-                                  style={{ ...styles.compactTextarea, minHeight: 88, width: "100%" }}
-                                  value={editingTxtDraft}
-                                  onChange={(e) => setEditingTxtDraft(e.target.value)}
-                                />
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                  <button
-                                    type="button"
-                                    style={secondaryButtonStyle}
-                                    onClick={cancelEditedTxtFile}
-                                  >
-                                    {tx("Cancel", "取消")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    style={secondaryButtonStyle}
-                                    onClick={saveEditedTxtFile}
-                                  >
-                                    {tx("Save", "保存")}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {isTxtFile ? (
-                                  <button
-                                    type="button"
-                                    style={secondaryButtonStyle}
-                                    onClick={() => void editTxtFile(idx)}
-                                  >
-                                    {tx("Edit", "編輯")}
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  style={secondaryButtonStyle}
-                                  onClick={() => removeFile(idx)}
-                                >
-                                  {tx("Remove", "移除")}
-                                </button>
-                              </>
-                            )}
+                            {isTxtFile && editingTxtIndex !== idx ? (
+                              <button
+                                type="button"
+                                style={secondaryButtonStyle}
+                                onClick={() => void editTxtFile(idx)}
+                              >
+                                {tx("Edit", "編輯")}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              style={secondaryButtonStyle}
+                              onClick={() => removeFile(idx)}
+                            >
+                              {tx("Remove", "移除")}
+                            </button>
                           </div>
                         </div>
                       );
@@ -5070,16 +5158,22 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     flexWrap: "wrap",
     marginTop: 4,
+    alignItems: "stretch",
   },
   miniActionButton: {
     border: "1px solid #d8e3f5",
     background: "#ffffff",
     color: "#214a8c",
     borderRadius: 12,
-    padding: "8px 11px",
+    padding: "10px 12px",
     fontWeight: 700,
     fontSize: 12,
     cursor: "pointer",
+    minHeight: 42,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1.3,
   },
   shortsEmptyState: {
     borderRadius: 16,
