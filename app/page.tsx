@@ -89,6 +89,9 @@ type ShortsWorkspaceState = {
   successMessage: string;
   errorMessage: string;
   copiedClipActionKey: string;
+  txtDescriptions: string[];
+  addingTxtsToUploads: boolean;
+  txtsAddedToUploads: boolean;
   jobId: string;
   jobStatus: string;
   jobProgress: number | null;
@@ -666,6 +669,9 @@ const createInitialShortsWorkspaceState = (
   successMessage: "",
   errorMessage: "",
   copiedClipActionKey: "",
+  txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
+  addingTxtsToUploads: false,
+  txtsAddedToUploads: false,
   jobId: "",
   jobStatus: "",
   jobProgress: null,
@@ -691,9 +697,6 @@ export default function Page() {
   const [folderName, setFolderName] = useState("");
   const [pageName, setPageName] = useState("");
 
-  const [txtDescriptions, setTxtDescriptions] = useState<string[]>(
-    Array.from({ length: TXT_BOX_COUNT }, () => "")
-  );
 
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
@@ -714,8 +717,6 @@ export default function Page() {
     useState<ShortsWorkspaceState[]>(createInitialShortsWorkspaces());
   const [activeShortsWorkspaceId, setActiveShortsWorkspaceId] =
     useState<string>(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
-  const [addingTxtsToUploads, setAddingTxtsToUploads] = useState(false);
-  const [txtsAddedToUploads, setTxtsAddedToUploads] = useState(false);
   const [shortsHistory, setShortsHistory] = useState<SavedShortsHistoryEntry[]>([]);
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
@@ -839,15 +840,12 @@ export default function Page() {
   }, [longUrl, signUpWallEnabled, utmFields]);
 
   const combinedTxtNotes = useMemo(() => {
-    return txtDescriptions
-      .map((value, index) => {
-        const trimmed = value.trim();
-        if (!trimmed) return "";
-        return `video${index + 1}\n${trimmed}`;
-      })
+    return shortsWorkspaces
+      .flatMap((workspace) => workspace.txtDescriptions)
+      .map((value) => value.trim())
       .filter(Boolean)
-      .join("\n\n");
-  }, [txtDescriptions]);
+      .join("\n");
+  }, [shortsWorkspaces]);
 
   const mirroredPlatformName = pageName || "";
   const shortsHistoryStorageKey = currentUser
@@ -1288,7 +1286,6 @@ export default function Page() {
 
   const resetUploadForm = () => {
     setFiles([]);
-    setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
     setLongUrl("");
     setShortUrl("");
     setCustomSlug("");
@@ -1298,8 +1295,6 @@ export default function Page() {
     setShortUrlCopied(false);
     setShortsWorkspaces(createInitialShortsWorkspaces());
     setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
-    setAddingTxtsToUploads(false);
-    setTxtsAddedToUploads(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -1357,8 +1352,6 @@ export default function Page() {
       setShortUrlCopied(false);
       setShortsWorkspaces(createInitialShortsWorkspaces());
       setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
-      setAddingTxtsToUploads(false);
-      setTxtsAddedToUploads(false);
       setLoginPassword("");
     } catch (err: any) {
       setAuthError(err?.message || "Unable to sign in right now.");
@@ -1378,7 +1371,6 @@ export default function Page() {
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
-    setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
     setShortUrlError("");
     setShortUrlSuccess("");
     setShortUrlCopied(false);
@@ -1387,8 +1379,6 @@ export default function Page() {
     setUtmFields(EMPTY_UTM_FIELDS);
     setShortsWorkspaces(createInitialShortsWorkspaces());
     setActiveShortsWorkspaceId(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
-    setAddingTxtsToUploads(false);
-    setTxtsAddedToUploads(false);
     setShortsHistory([]);
   };
 
@@ -2244,12 +2234,14 @@ export default function Page() {
     }));
   };
 
-  const addGeneratedTxtsToUploadList = () => {
+  const addGeneratedTxtsToUploadList = (workspaceId: string) => {
     setError("");
     setSuccess("");
-    setTxtsAddedToUploads(false);
 
-    const populatedEntries = txtDescriptions
+    const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+    if (!workspace) return;
+
+    const populatedEntries = workspace.txtDescriptions
       .map((value, index) => ({
         fileName: buildSequentialFileName(index, "txt"),
         content: value.trim(),
@@ -2262,7 +2254,10 @@ export default function Page() {
     }
 
     try {
-      setAddingTxtsToUploads(true);
+      updateShortsWorkspace(workspaceId, {
+        addingTxtsToUploads: true,
+        txtsAddedToUploads: false,
+      });
 
       const generatedTxtFiles = populatedEntries.map(
         (entry) =>
@@ -2274,23 +2269,35 @@ export default function Page() {
 
       setFiles((prev) => appendGeneratedFiles(prev, generatedTxtFiles, "txt"));
 
-      setTxtsAddedToUploads(true);
+      updateShortsWorkspace(workspaceId, {
+        txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
+        txtsAddedToUploads: true,
+      });
       window.setTimeout(() => {
-        setTxtsAddedToUploads(false);
+        updateShortsWorkspace(workspaceId, {
+          txtsAddedToUploads: false,
+        });
       }, 1600);
     } finally {
-      setAddingTxtsToUploads(false);
+      updateShortsWorkspace(workspaceId, {
+        addingTxtsToUploads: false,
+      });
     }
   };
 
-  const updateTxtDescription = (index: number, value: string) => {
-    setTxtDescriptions((prev) =>
-      prev.map((item, itemIndex) => (itemIndex === index ? value : item))
-    );
+  const updateTxtDescription = (workspaceId: string, index: number, value: string) => {
+    updateShortsWorkspace(workspaceId, (workspace) => ({
+      txtDescriptions: workspace.txtDescriptions.map((item, itemIndex) =>
+        itemIndex === index ? value : item
+      ),
+    }));
   };
 
-  const downloadTxt = () => {
-    const populatedEntries = txtDescriptions
+  const downloadTxt = (workspaceId: string) => {
+    const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+    if (!workspace) return;
+
+    const populatedEntries = workspace.txtDescriptions
       .map((value, index) => ({
         fileName: `video${index + 1}.txt`,
         content: value.trim(),
@@ -2304,7 +2311,7 @@ export default function Page() {
     }
 
     populatedEntries.forEach((entry) => {
-      const blob = new Blob(["\uFEFF" + entry.content], {
+      const blob = new Blob(["﻿" + entry.content], {
         type: "text/plain;charset=utf-8",
       });
       const url = URL.createObjectURL(blob);
@@ -2323,7 +2330,6 @@ export default function Page() {
     );
     setError("");
   };
-
   const generateShortUrl = async () => {
     setShortUrlError("");
     setShortUrlSuccess("");
@@ -2524,7 +2530,6 @@ export default function Page() {
       }
 
       setFiles([]);
-      setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
       setLongUrl("");
       setShortUrl("");
       setCustomSlug("");
@@ -3495,69 +3500,6 @@ export default function Page() {
                 <section style={styles.panel}>
                   <div style={styles.sectionHeader}>
                     <div>
-                      <div style={styles.kicker}>Step 4</div>
-                      <div style={styles.panelTitle}>{tx("TXT generator", "文本生成器")}</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.panelDesc}>
-                    After choosing your shorts, write matching TXT content for
-                    `video1` to `video5`. Use the ShortsGen titles and descriptions as
-                    reference, then add the generated TXT files directly into the upload
-                    files list below.
-                  </div>
-
-                  {activeShortsWorkspace.selectedShortIds.length ? (
-                    <div style={styles.helperBanner}>
-                      {activeShortsWorkspace.selectedShortIds.length} short(s) selected in Step 3. Fill TXT
-                      Description 1 to {activeShortsWorkspace.selectedShortIds.length} to match `video1` to
-                      `video{activeShortsWorkspace.selectedShortIds.length}` in the same order, and leave the
-                      remaining boxes empty if you do not need them.
-                    </div>
-                  ) : null}
-
-                  <div style={styles.txtGrid}>
-                    {txtDescriptions.map((value, index) => (
-                      <div key={`txt-${index}`}>
-                        <label style={styles.label}>{`TXT Description ${index + 1}`}</label>
-                        <textarea
-                          rows={3}
-                          style={styles.textareaCompact}
-                          value={value}
-                          onChange={(e) => updateTxtDescription(index, e.target.value)}
-                          placeholder={`Write TXT content for video${index + 1}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={styles.inlineActions}>
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.primaryButton,
-                        opacity: addingTxtsToUploads ? 0.7 : 1,
-                        cursor: addingTxtsToUploads ? "not-allowed" : "pointer",
-                      }}
-                      onClick={addGeneratedTxtsToUploadList}
-                      disabled={addingTxtsToUploads}
-                    >
-                      {addingTxtsToUploads
-                        ? "Adding TXT..."
-                        : "Add TXT to Upload files"}
-                    </button>
-                    {txtsAddedToUploads ? (
-                      <span style={styles.copiedText}>Added</span>
-                    ) : null}
-                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
-                      Download All TXT
-                    </button>
-                  </div>
-                </section>
-
-                <section style={styles.panel}>
-                  <div style={styles.sectionHeader}>
-                    <div>
                       <div style={styles.kicker}>Step 5</div>
                       <div style={styles.panelTitle}>{tx("Upload files", "上傳文件")}</div>
                     </div>
@@ -3621,7 +3563,10 @@ export default function Page() {
                               )}
                             </div>
                             <div>
-                              <div style={styles.fileName}>{file.name}</div>
+                              <div style={styles.fileName}>
+                                {file.name}
+                                {isTxtFile && txtSnippet ? ` — ${txtSnippet}` : ""}
+                              </div>
                               <div style={styles.fileMeta}>
                                 {(file.size / 1024 / 1024).toFixed(2)} MB
                               </div>
