@@ -3863,7 +3863,7 @@ export default function Page() {
                                     <div style={styles.workspaceTxtGrid}>
                                       {workspace.txtDescriptions.map((value, index) => (
                                         <div key={`${workspace.workspaceId}-txt-${index}`} style={styles.workspaceTxtCard}>
-                                          <label style={styles.label}>{tx(`TXT Description ${index + 1}`, `文本描述 ${index + 1}`)}</label>
+                                          <label style={styles.label}>{tx("Title and description", "Title and description")}</label>
                                           <textarea
                                             rows={3}
                                             style={workspaceTxtTextareaStyle}
@@ -4175,11 +4175,13 @@ export default function Page() {
                               <div style={styles.fileName}>
                                 {file.name}
                                 {isVideoFile && file.originalTitle ? ` — ${file.originalTitle}` : ""}
-                                {isTxtFile && txtSnippet ? ` — ${txtSnippet}` : ""}
                               </div>
                               <div style={styles.fileMeta}>
                                 {(file.size / 1024 / 1024).toFixed(2)} MB
                               </div>
+                              {isTxtFile && txtSnippet ? (
+                                <div style={styles.filePreviewSnippetBelow}>{txtSnippet}</div>
+                              ) : null}
                               {isTxtFile && editingTxtIndex === idx ? (
                                 <div style={{ display: "grid", gap: 8, marginTop: 10, maxWidth: 760 }}>
                                   <textarea
@@ -5037,6 +5039,14 @@ const styles: Record<string, React.CSSProperties> = {
   fileMeta: {
     color: "#6b7789",
     fontSize: 11,
+  },
+  filePreviewSnippetBelow: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 1.45,
+    color: "#6b7789",
+    wordBreak: "break-word",
+    whiteSpace: "normal",
   },
   inlineActions: {
     display: "flex",
