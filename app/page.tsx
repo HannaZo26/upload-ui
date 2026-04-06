@@ -1844,21 +1844,23 @@ export default function Page() {
   const copyClipText = async (
     workspaceId: string,
     clipId: string,
-    value: string,
-    label: "title" | "description"
+    title: string,
+    description: string
   ) => {
-    const trimmed = value.trim();
+    const combined = [title.trim(), description.trim()].filter(Boolean).join("
 
-    if (!trimmed) {
+");
+
+    if (!combined) {
       updateShortsWorkspace(workspaceId, {
-        errorMessage: `No ${label.toLowerCase()} is available to copy.`,
+        errorMessage: "No title or description is available to copy.",
       });
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(trimmed);
-      const actionKey = `${clipId}:${label}`;
+      await navigator.clipboard.writeText(combined);
+      const actionKey = `${clipId}:combined`;
       updateShortsWorkspace(workspaceId, {
         errorMessage: "",
         copiedClipActionKey: actionKey,
@@ -1871,7 +1873,7 @@ export default function Page() {
       }, 1600);
     } catch {
       updateShortsWorkspace(workspaceId, {
-        errorMessage: `Failed to copy ${label.toLowerCase()}.`,
+        errorMessage: "Failed to copy title and description.",
       });
     }
   };
@@ -2481,7 +2483,7 @@ export default function Page() {
         <div style={styles.mainArea}>
           <div style={styles.topbar}>
             <div>
-              <h1 style={styles.title}>{tx("Content Upload Dashboard", "內容上傳儀表板")}</h1>
+              <h1 style={styles.title}>{tx("Content Upload Dashboard", "內容上傳系統")}</h1>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button
@@ -2544,16 +2546,6 @@ export default function Page() {
 
                 {authError ? <div style={styles.errorBox}>{authError}</div> : null}
 
-                <div style={styles.demoCard}>
-                  <div style={styles.demoTitle}>{tx("Demo account", "演示帳戶")}</div>
-                  <div style={styles.demoRow}>
-                    <span style={styles.demoKey}>{tx("Username", "用戶名")}</span>
-                    <span style={styles.demoValue}>demo</span>
-                  </div>
-                  <div style={styles.panelDesc}>
-                    Demo login is configured on the server side and is no longer shown in the front-end code.
-                  </div>
-                </div>
               </div>
             </section>
           ) : (
@@ -2563,7 +2555,7 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 1</div>
-                      <div style={styles.panelTitle}>Social platforms</div>
+                      <div style={styles.panelTitle}>{tx("Social platforms", "社交媒體平台")}</div>
                     </div>
                   </div>
 
@@ -2614,18 +2606,13 @@ export default function Page() {
                       />
                     </div>
                   </div>
-
-                  <div style={styles.helperText}>
-                    Facebook Page is the only platform currently connected to automation.
-                    X, YouTube, and TikTok now mirror the Facebook Page name automatically.
-                  </div>
                 </section>
 
                 <section style={styles.panel}>
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 2</div>
-                      <div style={styles.panelTitle}>Short link generator</div>
+                      <div style={styles.panelTitle}>{tx("Short link generator", "短連結生成器")}</div>
                     </div>
                   </div>
 
@@ -2915,11 +2902,11 @@ export default function Page() {
                             }}
                           >
                             <div>
-                              <div style={styles.actionTitle}>{workspace.title}</div>
+                              <div style={styles.actionTitle}>{`${tx("Workspace", "工作區")} ${workspace.title.split(" ").pop() || ""}`.trim()}</div>
                               <div style={styles.helperText}>
-                                {workspace.jobId
-                                  ? `${tx("Current job", "目前 job")}: ${workspace.jobId}`
-                                  : tx("No job started yet", "尚未開始 job")}
+                                {workspace.sourceUrl
+                                  ? `${tx("Current job", "目前任務")}: ${workspace.sourceUrl}`
+                                  : tx("No job started yet", "尚未開始任務")}
                               </div>
                             </div>
                             <button
@@ -2967,7 +2954,9 @@ export default function Page() {
                                             {entry.sourceUrl || "Untitled job"}
                                           </div>
                                           <div style={styles.helperText}>
-                                            {entry.status || "-"} · {formatHistoryTimestamp(entry.updatedAt)}
+                                            <span style={getHistoryStatusStyle(entry.status)}>{entry.status || "-"}</span>
+                                            {" · "}
+                                            {formatHistoryTimestamp(entry.updatedAt)}
                                           </div>
                                         </div>
                                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -3306,33 +3295,14 @@ export default function Page() {
                                                       workspace.workspaceId,
                                                       clip.id,
                                                       clip.title,
-                                                      "title"
+                                                      clip.description || clip.angle
                                                     );
                                                   }}
                                                 >
-                                                  Copy title
+                                                  {tx("Copy title and description", "複製標題和描述")}
                                                 </button>
-                                                {workspace.copiedClipActionKey === `${clip.id}:title` ? (
-                                                  <span style={styles.copiedText}>Copied</span>
-                                                ) : null}
-                                                <button
-                                                  type="button"
-                                                  style={styles.miniActionButton}
-                                                  onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    void copyClipText(
-                                                      workspace.workspaceId,
-                                                      clip.id,
-                                                      clip.description || clip.angle,
-                                                      "description"
-                                                    );
-                                                  }}
-                                                >
-                                                  Copy description
-                                                </button>
-                                                {workspace.copiedClipActionKey === `${clip.id}:description` ? (
-                                                  <span style={styles.copiedText}>Copied</span>
+                                                {workspace.copiedClipActionKey === `${clip.id}:combined` ? (
+                                                  <span style={styles.copiedText}>{tx("Copied", "已複製")}</span>
                                                 ) : null}
                                               </div>
                                             </div>
@@ -3352,20 +3322,6 @@ export default function Page() {
                                     <button
                                       type="button"
                                       style={{
-                                        ...styles.secondaryButton,
-                                        opacity: workspace.downloadingShorts ? 0.7 : 1,
-                                        cursor: workspace.downloadingShorts ? "not-allowed" : "pointer",
-                                      }}
-                                      onClick={() => downloadSelectedShorts(workspace.workspaceId)}
-                                      disabled={workspace.downloadingShorts}
-                                    >
-                                      {workspace.downloadingShorts
-                                        ? "Preparing download..."
-                                        : "Download selected shorts"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      style={{
                                         ...styles.primaryButton,
                                         opacity: workspace.addingShortsToUploads ? 0.7 : 1,
                                         cursor: workspace.addingShortsToUploads ? "not-allowed" : "pointer",
@@ -3380,6 +3336,20 @@ export default function Page() {
                                     {workspace.shortsAddedToUploads ? (
                                       <span style={styles.copiedText}>Added</span>
                                     ) : null}
+                                    <button
+                                      type="button"
+                                      style={{
+                                        ...styles.secondaryButton,
+                                        opacity: workspace.downloadingShorts ? 0.7 : 1,
+                                        cursor: workspace.downloadingShorts ? "not-allowed" : "pointer",
+                                      }}
+                                      onClick={() => downloadSelectedShorts(workspace.workspaceId)}
+                                      disabled={workspace.downloadingShorts}
+                                    >
+                                      {workspace.downloadingShorts
+                                        ? "Preparing download..."
+                                        : "Download selected shorts"}
+                                    </button>
                                   </div>
 
                                   {workspace.successMessage ? (
@@ -3392,12 +3362,7 @@ export default function Page() {
                                 </div>
                               </div>
                             </>
-                          ) : (
-                            <div style={styles.helperText}>
-                              This workspace is collapsed. Expand it to continue generating,
-                              restoring, or downloading shorts.
-                            </div>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })}
@@ -3408,7 +3373,7 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 4</div>
-                      <div style={styles.panelTitle}>TXT generator</div>
+                      <div style={styles.panelTitle}>{tx("TXT generator", "文本生成器")}</div>
                     </div>
                   </div>
 
@@ -3444,9 +3409,6 @@ export default function Page() {
                   </div>
 
                   <div style={styles.inlineActions}>
-                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
-                      Download All TXT
-                    </button>
                     <button
                       type="button"
                       style={{
@@ -3464,6 +3426,9 @@ export default function Page() {
                     {txtsAddedToUploads ? (
                       <span style={styles.copiedText}>Added</span>
                     ) : null}
+                    <button type="button" style={styles.secondaryButton} onClick={downloadTxt}>
+                      Download All TXT
+                    </button>
                   </div>
                 </section>
 
@@ -3471,7 +3436,7 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 5</div>
-                      <div style={styles.panelTitle}>Upload files</div>
+                      <div style={styles.panelTitle}>{tx("Upload files", "上傳文件")}</div>
                     </div>
                   </div>
 
@@ -3531,7 +3496,7 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 6</div>
-                      <div style={styles.panelTitle}>Start automation</div>
+                      <div style={styles.panelTitle}>{tx("Start automation", "開始自動化")}</div>
                     </div>
                   </div>
 
