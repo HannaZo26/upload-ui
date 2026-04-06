@@ -2838,7 +2838,7 @@ export default function Page() {
       const normalizedShortUrl = normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN);
       setShortUrl(normalizedShortUrl);
       setShortUrlCopied(false);
-      setShortUrlSuccess("Short URL generated successfully with gjw.us.");
+      setShortUrlSuccess("Generated");
 
       persistShortLinkHistoryEntry({
         originalUrl: longUrl.trim(),
@@ -2897,7 +2897,7 @@ export default function Page() {
 
     if (currentUser.isDemo) {
       setError(
-        "The demo account is view-only. Please use a real account to start automation."
+        "The demo account is view-only. Please use a real account to activate automation."
       );
       return;
     }
@@ -2918,8 +2918,8 @@ export default function Page() {
       setSubmitting(true);
       setSuccess(
         tx(
-          "Starting automation... Please keep this page open until Upload successful appears.",
-          "正在開始自動化……請保持此頁面開啟，直到出現上傳成功提示。"
+          "Activating automation... Please keep this page open until Activated successfully appears.",
+          "正在開啟自動化……請保持此頁面開啟，直到出現「自動化已開啟成功」。"
         )
       );
 
@@ -2981,13 +2981,13 @@ export default function Page() {
       setSuccess(
         data?.message ||
           tx(
-            "Automation started successfully. Uploaded workspaces have been cleared for the next long-video URL.",
-            "自動化已成功啟動。已上傳的工作區已清空，可開始下一個 long-video URL。"
+            "Activated successfully",
+            "自動化已開啟成功"
           )
       );
       setError("");
     } catch (err: any) {
-      setError(err?.message || "Failed to start automation.");
+      setError(err?.message || "Failed to activate automation.");
       setSuccess("");
     } finally {
       setSubmitting(false);
@@ -3320,6 +3320,9 @@ export default function Page() {
                         >
                           {creatingShortUrl ? "Generating..." : "Generate Short URL"}
                         </button>
+                        {shortUrlSuccess ? (
+                          <span style={styles.copiedText}>{shortUrlSuccess}</span>
+                        ) : null}
                       </div>
 
                       <div>
@@ -3344,10 +3347,6 @@ export default function Page() {
                         </div>
                       </div>
 
-                      {shortUrlSuccess ? (
-                        <div style={styles.successBox}>{shortUrlSuccess}</div>
-                      ) : null}
-
                       {shortUrlError ? (
                         <div style={styles.errorBox}>{shortUrlError}</div>
                       ) : null}
@@ -3369,13 +3368,6 @@ export default function Page() {
                                     {tx("From long-video URL:", "對應長視頻鏈接：")} {item.originalUrl}
                                   </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  style={secondaryButtonStyle}
-                                  onClick={() => navigator.clipboard.writeText(item.shortUrl)}
-                                >
-                                  {tx("Copy", "複製")}
-                                </button>
                               </div>
                             ))}
                           </div>
@@ -3610,7 +3602,7 @@ export default function Page() {
                                         style={{
                                           display: "flex",
                                           justifyContent: "space-between",
-                                          gap: 10,
+                                          gap: 8,
                                           alignItems: "center",
                                           flexWrap: "wrap",
                                         }}
@@ -4238,14 +4230,14 @@ export default function Page() {
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>{tx("Step 5", "第 5 步")}</div>
-                      <div style={styles.panelTitle}>{tx("Start automation", "開始自動化")}</div>
+                      <div style={styles.panelTitle}>{tx("Activate automation", "開啟自動化")}</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then start the automation. Please keep this page open until you see Upload successful.",
-                      "檢查目前摘要後再開始自動化。請不要關閉此頁面，直到看到 Upload successful 才算完成。"
+                      "Review the current summary, then activate the automation. Please keep this page open until Activated successfully appears.",
+                      "檢查目前摘要後再開啟自動化。請保持此頁面開啟，直到看到「自動化已開啟成功」。"
                     )}
                   </div>
 
@@ -4294,14 +4286,24 @@ export default function Page() {
                       disabled={submitting || currentUser?.isDemo}
                     >
                       {currentUser?.isDemo
-                        ? "Demo account cannot start automation"
+                        ? "Demo account cannot activate automation"
                         : submitting
-                        ? "Starting..."
-                        : "Start automation"}
+                        ? "Activating..."
+                        : tx("Activate automation", "開啟自動化")}
                     </button>
                   </div>
 
-                  {success ? <div style={styles.successBox}>{success}</div> : null}
+                  {success ? (
+                    <div
+                      style={
+                        success === tx("Activated successfully", "自動化已開啟成功")
+                          ? styles.successCelebrationBox
+                          : styles.successBox
+                      }
+                    >
+                      {success}
+                    </div>
+                  ) : null}
                   {error ? <div style={styles.errorBox}>{error}</div> : null}
                 </section>
               </div>
@@ -5289,6 +5291,17 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #b8e8ca",
     fontWeight: 600,
   },
+  successCelebrationBox: {
+    marginTop: 16,
+    borderRadius: 16,
+    padding: "16px 18px",
+    background: "linear-gradient(180deg, #fff6db 0%, #fff1bf 100%)",
+    color: "#9a6700",
+    border: "1px solid #f5d77a",
+    fontWeight: 800,
+    fontSize: 18,
+    boxShadow: "0 12px 24px rgba(245, 183, 0, 0.18)",
+  },
   errorBox: {
     marginTop: 16,
     borderRadius: 14,
@@ -5323,16 +5336,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortLinkHistoryList: {
     display: "grid",
-    gap: 10,
+    gap: 8,
   },
   shortLinkHistoryRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 12,
-    padding: "10px 12px",
+    gap: 10,
+    padding: "8px 10px",
     border: "1px solid #e6eef9",
-    borderRadius: 14,
+    borderRadius: 12,
     background: "#f8fbff",
   },
   shortLinkHistoryProject: {
