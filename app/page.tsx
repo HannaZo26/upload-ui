@@ -2015,64 +2015,72 @@ export default function Page() {
       const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
       if (hasChinese) {
-        const titleCore = normalizeSnippet(rawTitle.replace(/[！!？?]+$/g, ""), 28) || "這段真的值得看完";
-        const descCore = normalizeSnippet(rawDescription, 44);
-        const hooks = [
-          `原來${titleCore}背後真正的關鍵在這裡`,
-          `看到這段才知道，${titleCore}不是表面看起來那麼簡單`,
-          `${titleCore}這件事，很多人其實一直都理解錯了`,
-          `如果你也在關注${titleCore}，這段內容很值得你看到最後`,
+        const titleCore = normalizeSnippet(rawTitle.replace(/[！!？?]+$/g, ""), 24) || "這段內容的核心重點";
+        const descCore = normalizeSnippet(rawDescription, 38);
+        const angles = [
+          `${titleCore}的重點，這支短片一次講清楚`,
+          `關於${titleCore}，真正值得看的就是這個核心`,
+          `${titleCore}為什麼會引起這麼多討論，這段講得很明白`,
+          `如果你想快速看懂${titleCore}，先看這一段就夠了`,
+          `${titleCore}背後最關鍵的脈絡，這裡直接點出來了`,
+          `這支短片把${titleCore}說得很直白，也更容易看懂`,
         ];
-        const endings = [
-          "看完會更明白整件事的脈絡。",
-          "這段講得比想像中還清楚。",
-          "越往後看，重點越完整。",
-          "難怪這段內容特別多人想轉發。",
-        ];
-        const details = descCore
+        const supports = descCore
           ? [
-              `重點其實就在：${descCore}`,
-              `裡面把最容易被忽略的部分講得很直接：${descCore}`,
-              `最抓人的地方是，它把核心原因說得很白：${descCore}`,
+              `最有價值的是，它把「${descCore}」這件事說得很清楚。`,
+              `裡面直接抓住「${descCore}」這個關鍵，所以特別值得看。`,
+              `它沒有繞圈子，而是直接把「${descCore}」講到重點。`,
             ]
-          : ["裡面的重點整理得很順，一看就能抓到核心。", "不是空話，是把真正的重點直接講清楚了。"];
+          : [
+              "整段節奏很順，開頭就直接進入重點。",
+              "內容不空泛，幾句話就把核心交代清楚了。",
+              "如果你想快速掌握主題，這支短片很適合先看。",
+            ];
+        const closers = [
+          "看完會更容易抓到整件事的關鍵。",
+          "這類內容最怕講不清楚，但這支短片做到了。",
+          "難得的是，它不誇張，卻很容易讓人想看下去。",
+          "如果你正在找重點版，這支短片會很適合。",
+        ];
         const variants = [
-          `${pick(hooks)}，${pick(details)}`,
-          `${pick(hooks)}。${pick(details)}`,
-          `${pick(details)}，${pick(endings)}`,
-          `${pick(hooks)}，${pick(endings)}`,
+          `${pick(angles)}。${pick(supports)}`,
+          `${pick(angles)}，${pick(closers)}`,
+          `${pick(supports)}${pick(closers)}`,
+          `${pick(angles)}。${pick(closers)}`,
         ];
         return pick(variants);
       }
 
-      const titleCore = normalizeSnippet(rawTitle.replace(/[!?]+$/g, ""), 52) || "this topic";
-      const descCore = normalizeSnippet(rawDescription, 90);
+      const titleCore = normalizeSnippet(rawTitle.replace(/[!?]+$/g, ""), 48) || "this topic";
+      const descCore = normalizeSnippet(rawDescription, 84);
       const hooks = [
-        `The real reason behind ${titleCore} is more surprising than most people expect`,
-        `If you've seen clips about ${titleCore}, this is the part people usually leave out`,
-        `${titleCore} makes a lot more sense once you hear this explained clearly`,
-        `This breakdown on ${titleCore} is exactly why people keep watching to the end`,
+        `${titleCore} is explained here in a way that is actually easy to follow`,
+        `This clip gets straight to the main point about ${titleCore}`,
+        `If you want the clearest short take on ${titleCore}, start with this clip`,
+        `What makes ${titleCore} interesting is exactly what this clip focuses on`,
+        `This breakdown of ${titleCore} feels direct, clear, and worth watching through`,
       ];
       const details = descCore
         ? [
-            `The strongest part is how clearly it lays out this point: ${descCore}`,
-            `What makes this clip worth watching is that it gets straight to the core: ${descCore}`,
-            `It turns a complicated point into something easy to follow: ${descCore}`,
+            `The best part is how clearly it frames this point: ${descCore}`,
+            `It works because it gets right to the core: ${descCore}`,
+            `Instead of dragging it out, it explains the key point fast: ${descCore}`,
           ]
         : [
-            "It feels natural, clear, and genuinely worth watching through.",
-            "It gets to the point fast without sounding forced.",
+            "It feels clear, direct, and easy to stay with.",
+            "It gets to the point quickly without sounding forced.",
+            "The pacing is clean, so the point lands fast.",
           ];
       const endings = [
-        "Watch through before you decide what you think.",
-        "This is the kind of clip that makes people stop scrolling.",
-        "It is much more interesting once the full point clicks.",
+        "It is the kind of clip that makes people stop and keep watching.",
+        "If you want the quick version without losing the point, this is a strong one.",
+        "This one is easy to click into because the point is clear right away.",
       ];
       const variants = [
         `${pick(hooks)}. ${pick(details)}`,
-        `${pick(hooks)} — ${pick(endings)}`,
-        `${pick(details)} ${pick(endings)}`,
         `${pick(hooks)}. ${pick(endings)}`,
+        `${pick(details)} ${pick(endings)}`,
+        `${pick(hooks)} — ${pick(endings)}`,
       ];
       return pick(variants);
     },
@@ -3155,7 +3163,7 @@ export default function Page() {
                             rows={2}
                             style={{
                               ...styles.compactTextarea,
-                              minHeight: 58,
+                              minHeight: 52,
                               background: "#f3f6fb",
                             }}
                             value={longUrlWithUtm}
@@ -4194,7 +4202,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   formStack: {
     display: "grid",
-    gap: 16,
+    gap: 12,
   },
   txtGrid: {
     display: "grid",
@@ -4211,8 +4219,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   utmBuilderCard: {
     display: "grid",
-    gap: 16,
-    padding: 16,
+    gap: 12,
+    padding: 14,
     borderRadius: 18,
     border: "1px solid #d9e7f7",
     background: "linear-gradient(180deg, #f7fbff 0%, #fffaf3 100%)",
@@ -4239,7 +4247,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   label: {
     display: "block",
-    marginBottom: 8,
+    marginBottom: 6,
     fontWeight: 700,
     fontSize: 14,
     color: "#1d2a3b",
@@ -4432,9 +4440,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   compactInput: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
-    padding: "10px 12px",
+    padding: "8px 11px",
     fontSize: 14,
     lineHeight: 1.25,
     outline: "none",
@@ -4443,9 +4451,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   compactSelect: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
-    padding: "10px 12px",
+    padding: "8px 11px",
     fontSize: 14,
     lineHeight: 1.25,
     outline: "none",
@@ -4454,10 +4462,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   compactTextarea: {
     width: "100%",
-    minHeight: 58,
-    borderRadius: 14,
+    minHeight: 52,
+    borderRadius: 12,
     border: "1px solid #cfdef2",
-    padding: "10px 12px",
+    padding: "8px 11px",
     fontSize: 14,
     lineHeight: 1.4,
     outline: "none",
@@ -4499,10 +4507,10 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
   },
   toggleCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     border: "1px solid #d9e7f7",
     background: "#ffffff",
-    padding: "14px 16px",
+    padding: "10px 12px",
   },
   toggleRow: {
     display: "inline-flex",
