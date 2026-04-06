@@ -900,7 +900,7 @@ export default function Page() {
     : "";
 
   const workspaceUiStorageKey = currentUser
-    ? buildWorkspaceUiStorageKey(currentUser.username)
+    ? `ucreator-console-workspace-ui:${currentUser.username}`
     : "";
   const activeShortsWorkspace = useMemo(
     () =>
@@ -1453,7 +1453,7 @@ export default function Page() {
 
   const handleLogout = () => {
     if (currentUser) {
-      removeStoredJson(buildWorkspaceUiStorageKey(currentUser.username));
+      removeStoredJson(`ucreator-console-workspace-ui:${currentUser.username}`);
     }
     removeStoredJson(SESSION_STORAGE_KEY);
     setCurrentUser(null);
