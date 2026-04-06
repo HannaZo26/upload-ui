@@ -2270,7 +2270,6 @@ export default function Page() {
       setFiles((prev) => appendGeneratedFiles(prev, generatedTxtFiles, "txt"));
 
       updateShortsWorkspace(workspaceId, {
-        txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
         txtsAddedToUploads: true,
       });
       window.setTimeout(() => {
