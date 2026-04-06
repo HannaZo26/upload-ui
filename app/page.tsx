@@ -434,6 +434,8 @@ const sleep = (ms: number) =>
   });
 
 const SESSION_STORAGE_KEY = "ucreator-console-session";
+const LANGUAGE_STORAGE_KEY = "ucreator-console-lang";
+const SHORTS_HISTORY_PER_WORKSPACE = 3;
 const buildShortsHistoryStorageKey = (username: string) =>
   `ucreator-console-shorts-history:${username}`;
 
@@ -475,9 +477,19 @@ const upsertShortsHistoryEntry = (
   nextEntry: SavedShortsHistoryEntry
 ) => {
   const filtered = entries.filter((item) => item.jobId !== nextEntry.jobId);
-  return [nextEntry, ...filtered]
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 5);
+  const sorted = [nextEntry, ...filtered].sort((a, b) => b.updatedAt - a.updatedAt);
+  const next: SavedShortsHistoryEntry[] = [];
+  const counts = new Map<string, number>();
+
+  for (const entry of sorted) {
+    const workspaceKey = entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId;
+    const count = counts.get(workspaceKey) || 0;
+    if (count >= SHORTS_HISTORY_PER_WORKSPACE) continue;
+    counts.set(workspaceKey, count + 1);
+    next.push(entry);
+  }
+
+  return next;
 };
 
 const getPollDelayMs = (attempt: number) => {
@@ -631,6 +643,9 @@ export default function Page() {
   const [loginPassword, setLoginPassword] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authError, setAuthError] = useState("");
+  const [lang, setLang] = useState<"en" | "zh">(() =>
+    readStoredJson<"en" | "zh">(LANGUAGE_STORAGE_KEY, "en")
+  );
 
   const n8nWebhookUrl =
     "https://n8n.influencerconnectagency.biz/webhook/upload-entry";
@@ -747,6 +762,7 @@ export default function Page() {
     [activeShortsWorkspaceId, shortsWorkspaces]
   );
   const activeShortsMonitorRef = useRef<Record<string, string>>({});
+  const tx = useCallback((en: string, zh: string) => (lang === "zh" ? zh : en), [lang]);
 
   const updateShortsWorkspace = useCallback(
     (
@@ -1123,6 +1139,10 @@ export default function Page() {
     if (!currentUser) return;
     persistSessionState(currentUser, pageName, folderName || pageName);
   }, [currentUser, folderName, pageName, persistSessionState]);
+
+  useEffect(() => {
+    writeStoredJson(LANGUAGE_STORAGE_KEY, lang);
+  }, [lang]);
 
   useEffect(() => {
     if (!pageName || !okurlProjects.length) return;
@@ -1585,20 +1605,71 @@ export default function Page() {
     });
   }, [currentUser, monitorShortsJob, shortsHistory]);
 
-  const restoreShortsHistoryEntry = (entry: SavedShortsHistoryEntry) => {
+  const restoreShortsHistoryEntry = async (entry: SavedShortsHistoryEntry) => {
     hydrateShortsEntry(entry);
 
-    if (!isTerminalShortsStatus(entry.status) && entry.jobId) {
-      monitorShortsJob({
-        workspaceId: entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId,
-        jobId: entry.jobId,
-        sourceUrl: entry.sourceUrl,
-        mode: entry.mode,
-        rangeStart: entry.rangeStart,
-        rangeEnd: entry.rangeEnd,
-        createdAt: entry.createdAt || Date.now(),
-      });
+    if (!entry.jobId) return;
+
+    if (String(entry.status || "").toUpperCase() === "COMPLETED") {
+      if (Array.isArray(entry.clips) && entry.clips.length) return;
+
+      try {
+        const clips = await fetchShortsResultsForJob(entry.jobId);
+        const preselectedIds = clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id);
+        updateShortsWorkspace(entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId, {
+          clips,
+          selectedShortIds: preselectedIds,
+          uploadedClipIds: Array.isArray(entry.uploadedClipIds) ? entry.uploadedClipIds : [],
+          jobStatus: "COMPLETED",
+          jobProgress: 100,
+          successMessage: tx(
+            `${clips.length} short(s) restored from history.`,
+            `已從歷史恢復 ${clips.length} 個 shorts。`
+          ),
+          errorMessage: "",
+        });
+
+        persistShortsHistoryEntry({
+          ...entry,
+          status: "COMPLETED",
+          progress: 100,
+          clips,
+          selectedShortIds: preselectedIds,
+          updatedAt: Date.now(),
+        });
+      } catch (err: any) {
+        updateShortsWorkspace(entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId, {
+          errorMessage: err?.message || tx("Failed to restore the clip history.", "恢復 clips 歷史失敗。"),
+        });
+      }
+      return;
     }
+
+    monitorShortsJob({
+      workspaceId: entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId,
+      jobId: entry.jobId,
+      sourceUrl: entry.sourceUrl,
+      mode: entry.mode,
+      rangeStart: entry.rangeStart,
+      rangeEnd: entry.rangeEnd,
+      createdAt: entry.createdAt || Date.now(),
+    });
+  };
+
+  const reloadShortsHistoryEntry = (entry: SavedShortsHistoryEntry) => {
+    hydrateShortsEntry(entry);
+
+    if (!entry.jobId) return;
+
+    monitorShortsJob({
+      workspaceId: entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId,
+      jobId: entry.jobId,
+      sourceUrl: entry.sourceUrl,
+      mode: entry.mode,
+      rangeStart: entry.rangeStart,
+      rangeEnd: entry.rangeEnd,
+      createdAt: entry.createdAt || Date.now(),
+    });
   };
 
   const generateShorts = async (workspaceId: string) => {
@@ -2004,17 +2075,19 @@ export default function Page() {
       );
 
       const uploadedIds = [...workspace.selectedShortIds];
-      const remainingClips = workspace.clips.filter((clip) => !uploadedIds.includes(clip.id));
 
       updateShortsWorkspace(workspaceId, (currentWorkspace) => ({
         shortsAddedToUploads: true,
-        clips: currentWorkspace.clips.filter((clip) => !uploadedIds.includes(clip.id)),
+        clips: currentWorkspace.clips,
         selectedShortIds: [],
         uploadedClipIds: Array.from(
           new Set([...currentWorkspace.uploadedClipIds, ...uploadedIds])
         ),
         successMessage: uploadedIds.length
-          ? `${uploadedIds.length} short(s) moved to Upload files. Remaining clips stay here until you finish the workspace.`
+          ? tx(
+              `${uploadedIds.length} short(s) moved to Upload files. Preview clips stay here until you start automation or finish the workspace.`,
+              `已將 ${uploadedIds.length} 個 shorts 加入 Upload files。預覽 clips 會保留在這裡，直到你點 Start automation 或 Finish。`
+            )
           : currentWorkspace.successMessage,
       }));
       window.setTimeout(() => {
@@ -2032,13 +2105,16 @@ export default function Page() {
         rangeEnd: workspace.rangeEnd,
         status: workspace.jobStatus,
         progress: workspace.jobProgress,
-        clips: remainingClips,
+        clips: workspace.clips,
         selectedShortIds: [],
         uploadedClipIds: Array.from(new Set([...(workspace.uploadedClipIds || []), ...uploadedIds])),
         createdAt: Date.now(),
         updatedAt: Date.now(),
         successMessage: uploadedIds.length
-          ? `${uploadedIds.length} short(s) moved to Upload files. Remaining clips stay here until you finish the workspace.`
+          ? tx(
+              `${uploadedIds.length} short(s) moved to Upload files. Preview clips stay here until you start automation or finish the workspace.`,
+              `已將 ${uploadedIds.length} 個 shorts 加入 Upload files。預覽 clips 會保留在這裡，直到你點 Start automation 或 Finish。`
+            )
           : workspace.successMessage,
         errorMessage: workspace.errorMessage,
       });
@@ -2242,6 +2318,21 @@ export default function Page() {
     }
   };
 
+  const clearSubmittedShortsWorkspaces = useCallback(() => {
+    setShortsWorkspaces((prev) =>
+      prev.map((workspace) => {
+        if (!workspace.uploadedClipIds.length) return workspace;
+        const config =
+          SHORTS_WORKSPACE_CONFIG.find((item) => item.workspaceId === workspace.workspaceId) ||
+          SHORTS_WORKSPACE_CONFIG[0];
+        return {
+          ...createInitialShortsWorkspaceState(workspace.workspaceId, config.title),
+          isCollapsed: workspace.isCollapsed,
+        };
+      })
+    );
+  }, []);
+
   const submitToN8n = async () => {
     setSuccess("");
     setError("");
@@ -2319,9 +2410,22 @@ export default function Page() {
         );
       }
 
-      resetUploadForm();
+      setFiles([]);
+      setTxtDescriptions(Array.from({ length: TXT_BOX_COUNT }, () => ""));
+      setLongUrl("");
+      setShortUrl("");
+      setCustomSlug("");
+      setSignUpWallEnabled(false);
+      setShortUrlError("");
+      setShortUrlSuccess("");
+      setShortUrlCopied(false);
+      clearSubmittedShortsWorkspaces();
       setSuccess(
-        data?.message || "Automation started successfully. Form has been cleared."
+        data?.message ||
+          tx(
+            "Automation started successfully. Uploaded workspaces have been cleared for the next long-video URL.",
+            "自動化已成功啟動。已上傳的工作區已清空，可開始下一個 long-video URL。"
+          )
       );
       setError("");
     } catch (err: any) {
@@ -2377,37 +2481,59 @@ export default function Page() {
         <div style={styles.mainArea}>
           <div style={styles.topbar}>
             <div>
-              <h1 style={styles.title}>Content Upload Dashboard</h1>
+              <h1 style={styles.title}>{tx("Content Upload Dashboard", "內容上傳儀表板")}</h1>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                style={{
+                  ...styles.secondaryButton,
+                  ...(lang === "en" ? { borderColor: "#f29a3f", color: "#c77416" } : null),
+                }}
+                onClick={() => setLang("en")}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...styles.secondaryButton,
+                  ...(lang === "zh" ? { borderColor: "#f29a3f", color: "#c77416" } : null),
+                }}
+                onClick={() => setLang("zh")}
+              >
+                中文
+              </button>
             </div>
           </div>
 
           {!currentUser ? (
             <section style={styles.loginWrap}>
               <div style={styles.panel}>
-                <div style={styles.panelTitle}>Sign in</div>
+                <div style={styles.panelTitle}>{tx("Sign in", "登入")}</div>
                 <div style={styles.panelDesc}>
                   Sign in to access the page folders assigned to your account.
                 </div>
 
                 <form onSubmit={handleLogin} style={styles.formGrid}>
                   <div>
-                    <label style={styles.label}>Username</label>
+                    <label style={styles.label}>{tx("Username", "用戶名")}</label>
                     <input
                       style={styles.input}
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
-                      placeholder="Enter username"
+                      placeholder={tx("Enter username", "輸入用戶名")}
                     />
                   </div>
 
                   <div>
-                    <label style={styles.label}>Password</label>
+                    <label style={styles.label}>{tx("Password", "密碼")}</label>
                     <input
                       type="password"
                       style={styles.input}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="Enter password"
+                      placeholder={tx("Enter password", "輸入密碼")}
                     />
                   </div>
 
@@ -2419,9 +2545,9 @@ export default function Page() {
                 {authError ? <div style={styles.errorBox}>{authError}</div> : null}
 
                 <div style={styles.demoCard}>
-                  <div style={styles.demoTitle}>Demo account</div>
+                  <div style={styles.demoTitle}>{tx("Demo account", "演示帳戶")}</div>
                   <div style={styles.demoRow}>
-                    <span style={styles.demoKey}>Username</span>
+                    <span style={styles.demoKey}>{tx("Username", "用戶名")}</span>
                     <span style={styles.demoValue}>demo</span>
                   </div>
                   <div style={styles.panelDesc}>
@@ -2738,15 +2864,16 @@ export default function Page() {
                 <section style={styles.panel}>
                   <div style={styles.sectionHeader}>
                     <div>
-                      <div style={styles.kicker}>Step 3</div>
-                      <div style={styles.panelTitle}>Shorts generator</div>
+                      <div style={styles.kicker}>{tx("Step 3", "第 3 步")}</div>
+                      <div style={styles.panelTitle}>{tx("Shorts generator", "Shorts 生成器")}</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
-                    Use up to 3 parallel workspaces for different long-video URLs. Each
-                    workspace saves its own in-progress job, can auto-resume after refresh,
-                    and can be expanded or collapsed so the page stays manageable.
+                    {tx(
+                      "Use up to 3 parallel workspaces for different long-video URLs. Each workspace saves its own in-progress job, can auto-resume after refresh, and can be expanded or collapsed so the page stays manageable.",
+                      "最多可同時使用 3 個工作區處理不同的 long-video URL。每個工作區都會保存自己的進行中 job、在刷新後自動恢復，並可展開或收縮，讓頁面保持清晰。"
+                    )}
                   </div>
 
                   <div style={{ display: "grid", gap: 18 }}>
@@ -2791,8 +2918,8 @@ export default function Page() {
                               <div style={styles.actionTitle}>{workspace.title}</div>
                               <div style={styles.helperText}>
                                 {workspace.jobId
-                                  ? `Current job: ${workspace.jobId}`
-                                  : "No job started yet"}
+                                  ? `${tx("Current job", "目前 job")}: ${workspace.jobId}`
+                                  : tx("No job started yet", "尚未開始 job")}
                               </div>
                             </div>
                             <button
@@ -2803,7 +2930,7 @@ export default function Page() {
                                 toggleShortsWorkspaceCollapse(workspace.workspaceId);
                               }}
                             >
-                              {workspace.isCollapsed ? "▸ Expand" : "▾ Collapse"}
+                              {workspace.isCollapsed ? tx("▸ Expand", "▸ 展開") : tx("▾ Collapse", "▾ 收起")}
                             </button>
                           </div>
 
@@ -2824,7 +2951,7 @@ export default function Page() {
                                     Recent history for this workspace
                                   </div>
                                   <div style={{ display: "grid", gap: 8 }}>
-                                    {workspaceHistory.slice(0, 5).map((entry) => (
+                                    {workspaceHistory.slice(0, SHORTS_HISTORY_PER_WORKSPACE).map((entry) => (
                                       <div
                                         key={`${workspace.workspaceId}-${entry.jobId}`}
                                         style={{
@@ -2843,13 +2970,22 @@ export default function Page() {
                                             {entry.status || "-"} · {formatHistoryTimestamp(entry.updatedAt)}
                                           </div>
                                         </div>
-                                        <button
-                                          type="button"
-                                          style={styles.secondaryButton}
-                                          onClick={() => restoreShortsHistoryEntry(entry)}
-                                        >
-                                          Restore
-                                        </button>
+                                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                          <button
+                                            type="button"
+                                            style={styles.secondaryButton}
+                                            onClick={() => restoreShortsHistoryEntry(entry)}
+                                          >
+                                            {tx("Restore", "恢復")}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            style={styles.secondaryButton}
+                                            onClick={() => reloadShortsHistoryEntry(entry)}
+                                          >
+                                            {tx("Reload", "重新載入")}
+                                          </button>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
@@ -2859,7 +2995,7 @@ export default function Page() {
                               <div style={styles.shortsPanel}>
                                 <div style={styles.formStack}>
                                   <div>
-                                    <label style={styles.label}>Long video URL</label>
+                                    <label style={styles.label}>{tx("Long video URL", "Long video URL")}</label>
                                     <input
                                       style={styles.input}
                                       value={workspace.sourceUrl}
@@ -2869,13 +3005,13 @@ export default function Page() {
                                           sourceUrl: e.target.value,
                                         });
                                       }}
-                                      placeholder="Paste the long video URL here"
+                                      placeholder={tx("Paste the long video URL here", "請貼上 long video URL")}
                                     />
                                   </div>
 
                                   <div style={styles.formStack}>
                                     <div>
-                                      <label style={styles.label}>Clipping mode</label>
+                                      <label style={styles.label}>{tx("Clipping mode", "剪輯模式")}</label>
                                       <div style={styles.segmentedControl}>
                                         <button
                                           type="button"
@@ -2921,9 +3057,9 @@ export default function Page() {
 
                                     {workspace.mode === "aiClipping" ? (
                                       <div>
-                                        <label style={styles.label}>Time range</label>
+                                        <label style={styles.label}>{tx("Time range", "時間範圍")}</label>
                                         <div style={styles.timeframeToolbar}>
-                                          <div style={styles.timeframeTitle}>Select timeframe</div>
+                                          <div style={styles.timeframeTitle}>{tx("Select timeframe", "選擇時間區間")}</div>
                                           <button
                                             type="button"
                                             style={styles.timeframeReset}
@@ -3059,7 +3195,7 @@ export default function Page() {
 
                                 <div style={styles.shortsPreviewCard}>
                                   <div style={styles.shortsPreviewHeader}>
-                                    <div style={styles.actionTitle}>Preview clips</div>
+                                    <div style={styles.actionTitle}>{tx("Preview clips", "預覽 clips")}</div>
                                     <div style={styles.shortsPreviewPills}>
                                       {workspace.jobStatus ? (
                                         <div style={styles.statusPill}>{workspace.jobStatus}</div>
@@ -3077,11 +3213,11 @@ export default function Page() {
                                   workspace.jobStatus !== "FAILED" ? (
                                     <div style={styles.progressCard}>
                                       <div style={styles.progressRow}>
-                                        <div style={styles.progressLabel}>Generation progress</div>
+                                        <div style={styles.progressLabel}>{tx("Generation progress", "生成進度")}</div>
                                         <div style={styles.progressValue}>
                                           {workspace.jobProgress !== null
                                             ? `${workspace.jobProgress}%`
-                                            : "Processing"}
+                                            : tx("Processing", "處理中")}
                                         </div>
                                       </div>
                                       <div style={styles.progressTrack}>
@@ -3126,7 +3262,7 @@ export default function Page() {
                                               </div>
                                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                                 {uploaded ? (
-                                                  <div style={styles.progressPill}>Uploaded</div>
+                                                  <div style={styles.progressPill}>{tx("Uploaded", "已上傳")}</div>
                                                 ) : null}
                                                 <div style={styles.shortsQualityPill}>
                                                   {clip.qualityLabel}
@@ -3152,9 +3288,9 @@ export default function Page() {
                                                 #{clip.rank} · {clip.duration} · {clip.angle}
                                               </div>
                                               <div style={styles.shortsClipTextBlock}>
-                                                <div style={styles.shortsClipTextLabel}>Title</div>
+                                                <div style={styles.shortsClipTextLabel}>{tx("Title", "標題")}</div>
                                                 <div style={styles.shortsClipSnippet}>{clip.title}</div>
-                                                <div style={styles.shortsClipTextLabel}>Description</div>
+                                                <div style={styles.shortsClipTextLabel}>{tx("Description", "描述")}</div>
                                                 <div style={styles.shortsClipDescription}>
                                                   {clip.description || "No description returned by ShortsGen."}
                                                 </div>
