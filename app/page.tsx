@@ -4172,13 +4172,13 @@ export default function Page() {
                               )}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={styles.fileName}>
-                                {file.name}
-                                {isVideoFile && file.originalTitle ? ` — ${file.originalTitle}` : ""}
-                              </div>
+                              <div style={styles.fileName}>{file.name}</div>
                               <div style={styles.fileMeta}>
                                 {(file.size / 1024 / 1024).toFixed(2)} MB
                               </div>
+                              {isVideoFile && file.originalTitle ? (
+                                <div style={styles.filePreviewSnippetBelow}>{file.originalTitle}</div>
+                              ) : null}
                               {isTxtFile && txtSnippet ? (
                                 <div style={styles.filePreviewSnippetBelow}>{txtSnippet}</div>
                               ) : null}
