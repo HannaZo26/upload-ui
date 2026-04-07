@@ -80,6 +80,7 @@ type ShortLinkHistoryEntry = {
   originalUrl: string;
   shortUrl: string;
   projectName: string;
+  videoTitle: string;
   createdAt: number;
 };
 
@@ -782,7 +783,8 @@ export default function Page() {
   const [files, setFiles] = useState<UploadableFile[]>([]);
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
   const [txtPreviewSnippets, setTxtPreviewSnippets] = useState<Record<string, string>>({});
-  const [editingTxtIndex, setEditingTxtIndex] = useState<number | null>(null);
+  const [editingFileIndex, setEditingFileIndex] = useState<number | null>(null);
+  const [editingFileNameDraft, setEditingFileNameDraft] = useState("");
   const [editingTxtDraft, setEditingTxtDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
@@ -790,6 +792,7 @@ export default function Page() {
   const [activatedSuccessfully, setActivatedSuccessfully] = useState(false);
 
   const [longUrl, setLongUrl] = useState("");
+  const [videoTitle, setVideoTitle] = useState("");
   const [customSlug, setCustomSlug] = useState("");
   const [signUpWallEnabled, setSignUpWallEnabled] = useState(false);
   const [shortUrl, setShortUrl] = useState("");
@@ -1459,6 +1462,7 @@ export default function Page() {
   const resetUploadForm = () => {
     setFiles([]);
     setLongUrl("");
+    setVideoTitle("");
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
@@ -1543,6 +1547,7 @@ export default function Page() {
     setError("");
     setAuthError("");
     setLongUrl("");
+    setVideoTitle("");
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
@@ -1589,49 +1594,65 @@ export default function Page() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const editTxtFile = async (index: number) => {
+  const startEditingFile = async (index: number) => {
     const targetFile = files[index];
     if (!targetFile) return;
 
     const isTxtFile =
       targetFile.type.startsWith("text/") || /\.txt$/i.test(targetFile.name);
-    if (!isTxtFile) return;
 
-    try {
-      const currentContent = await targetFile.text();
-      setEditingTxtIndex(index);
-      setEditingTxtDraft(currentContent.replace(/^﻿/, ""));
-    } catch (err) {
-      setError(
-        lang === "zh" ? "TXT 文件暫時無法編輯，請稍後再試。" : "Unable to edit this TXT file right now."
-      );
-      setSuccess("");
+    setEditingFileIndex(index);
+    setEditingFileNameDraft(targetFile.name);
+
+    if (isTxtFile) {
+      try {
+        const currentContent = await targetFile.text();
+        setEditingTxtDraft(currentContent.replace(/^﻿/, ""));
+      } catch (err) {
+        setError(
+          lang === "zh" ? "TXT 文件暫時無法編輯，請稍後再試。" : "Unable to edit this TXT file right now."
+        );
+        setSuccess("");
+      }
+    } else {
+      setEditingTxtDraft("");
     }
   };
 
-  const saveEditedTxtFile = () => {
-    if (editingTxtIndex === null) return;
-    const targetFile = files[editingTxtIndex];
+  const saveEditedFile = () => {
+    if (editingFileIndex === null) return;
+    const targetFile = files[editingFileIndex];
     if (!targetFile) return;
 
-    const updatedFile = new File(["﻿" + editingTxtDraft], targetFile.name, {
-      type: "text/plain;charset=utf-8",
-      lastModified: Date.now(),
-    }) as UploadableFile;
+    const trimmedName = editingFileNameDraft.trim() || targetFile.name;
+    const isTxtFile =
+      targetFile.type.startsWith("text/") || /\.txt$/i.test(targetFile.name);
+
+    const updatedFile = isTxtFile
+      ? (new File(["﻿" + editingTxtDraft], trimmedName, {
+          type: "text/plain;charset=utf-8",
+          lastModified: Date.now(),
+        }) as UploadableFile)
+      : (new File([targetFile], trimmedName, {
+          type: targetFile.type || "video/mp4",
+          lastModified: Date.now(),
+        }) as UploadableFile);
 
     if (targetFile.originalTitle) {
       updatedFile.originalTitle = targetFile.originalTitle;
     }
 
     setFiles((prev) =>
-      prev.map((file, fileIndex) => (fileIndex === editingTxtIndex ? updatedFile : file))
+      prev.map((file, fileIndex) => (fileIndex === editingFileIndex ? updatedFile : file))
     );
-    setEditingTxtIndex(null);
+    setEditingFileIndex(null);
+    setEditingFileNameDraft("");
     setEditingTxtDraft("");
   };
 
-  const cancelEditedTxtFile = () => {
-    setEditingTxtIndex(null);
+  const cancelEditingFile = () => {
+    setEditingFileIndex(null);
+    setEditingFileNameDraft("");
     setEditingTxtDraft("");
   };
 
@@ -2799,6 +2820,7 @@ const generateViralClipText = useCallback(
         },
         body: JSON.stringify({
           url: urlForShortLink,
+          title: videoTitle.trim() || undefined,
           project_id: Number(selectedProjectId),
           domain_id: selectedDomain.id,
           path_prefix: selectedDomain.pathPrefix || "s",
@@ -2850,6 +2872,7 @@ const generateViralClipText = useCallback(
         originalUrl: longUrl.trim(),
         shortUrl: normalizedShortUrl,
         projectName: selectedProject?.name || "",
+        videoTitle: videoTitle.trim(),
         createdAt: Date.now(),
       });
     } catch (err: any) {
@@ -2935,7 +2958,7 @@ const generateViralClipText = useCallback(
       formData.append("page_name", pageName);
       formData.append("folder_name", effectiveFolderName);
       formData.append("facebook_page", pageName);
-      formData.append("title", "");
+      formData.append("title", videoTitle.trim());
       formData.append("target_url", longUrlWithUtm || longUrl);
       formData.append("notes", combinedTxtNotes);
       formData.append("short_url", shortUrl);
@@ -2978,6 +3001,7 @@ const generateViralClipText = useCallback(
 
       setFiles([]);
       setLongUrl("");
+      setVideoTitle("");
       setShortUrl("");
       setCustomSlug("");
       setSignUpWallEnabled(false);
@@ -3270,6 +3294,16 @@ const generateViralClipText = useCallback(
                       </div>
 
                       <div>
+                        <label style={styles.label}>{tx("Video Title", "視頻標題")}</label>
+                        <input
+                          style={styles.input}
+                          value={videoTitle}
+                          onChange={(e) => setVideoTitle(e.target.value)}
+                          placeholder={tx("Paste or edit the OKURL title here", "請貼上或編輯 OKURL 的標題")}
+                        />
+                      </div>
+
+                      <div>
                         <label style={styles.label}>Project</label>
                         <div style={styles.shortUrlRow}>
                           <select
@@ -3372,11 +3406,13 @@ const generateViralClipText = useCallback(
                                     {item.projectName || tx("Unknown project", "未命名項目")}
                                   </div>
                                   <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
-                                  <div style={styles.shortLinkHistoryOrigin}>
-                                    {tx("From long-video URL:", "對應長視頻鏈接：")} {item.originalUrl}
-                                  </div>
+                                  {item.videoTitle ? (
+                                    <div style={styles.shortLinkHistoryVideoTitle}>
+                                      {tx("Video Title", "視頻標題")}：{item.videoTitle}
+                                    </div>
+                                  ) : null}
                                 </div>
-</div>
+                              </div>
                             ))}
                           </div>
                         ) : (
@@ -3893,6 +3929,13 @@ const generateViralClipText = useCallback(
                                           ? tx("Adding TXT...", "正在加入 TXT...")
                                           : tx("Add TXT to Upload files", "加入 TXT 到上傳文件")}
                                       </button>
+                                      <button
+                                        type="button"
+                                        style={styles.secondaryButton}
+                                        onClick={() => downloadTxt(workspace.workspaceId)}
+                                      >
+                                        {tx("Download all TXT", "下載全部 TXT")}
+                                      </button>
                                       {workspace.txtsAddedToUploads ? (
                                         <span style={styles.copiedText}>{tx("Added ✓", "已加入 ✓")}</span>
                                       ) : null}
@@ -4152,6 +4195,7 @@ const generateViralClipText = useCallback(
                       const txtSnippet = txtPreviewSnippets[previewKey];
                       const isVideoFile = Boolean(videoPreviewUrl);
                       const isTxtFile = file.type.startsWith("text/") || /\.txt$/i.test(file.name);
+                      const isEditing = editingFileIndex === idx;
 
                       return (
                         <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
@@ -4172,50 +4216,69 @@ const generateViralClipText = useCallback(
                               )}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={styles.fileName}>{file.name}</div>
-                              <div style={styles.fileMeta}>
-                                {(file.size / 1024 / 1024).toFixed(2)} MB
-                              </div>
-                              {isVideoFile && file.originalTitle ? (
-                                <div style={styles.filePreviewSnippetBelow}>{file.originalTitle}</div>
-                              ) : null}
-                              {isTxtFile && txtSnippet ? (
-                                <div style={styles.filePreviewSnippetBelow}>{txtSnippet}</div>
-                              ) : null}
-                              {isTxtFile && editingTxtIndex === idx ? (
-                                <div style={{ display: "grid", gap: 8, marginTop: 10, maxWidth: 760 }}>
-                                  <textarea
-                                    rows={5}
-                                    style={{ ...styles.compactTextarea, minHeight: 112, width: "100%", maxWidth: 760 }}
-                                    value={editingTxtDraft}
-                                    onChange={(e) => setEditingTxtDraft(e.target.value)}
-                                  />
+                              {!isEditing ? (
+                                <>
+                                  <div style={styles.fileName}>{file.name}</div>
+                                  <div style={styles.fileMeta}>
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  </div>
+                                  {isVideoFile && file.originalTitle ? (
+                                    <div style={styles.filePreviewSnippetBelow}>{file.originalTitle}</div>
+                                  ) : null}
+                                  {isTxtFile && txtSnippet ? (
+                                    <div style={styles.filePreviewSnippetBelow}>{txtSnippet}</div>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <div style={{ display: "grid", gap: 8, marginTop: 2, maxWidth: 760 }}>
+                                  <div>
+                                    <label style={styles.label}>{tx("File name", "文件名")}</label>
+                                    <input
+                                      style={styles.compactInput}
+                                      value={editingFileNameDraft}
+                                      onChange={(e) => setEditingFileNameDraft(e.target.value)}
+                                    />
+                                  </div>
+                                  <div style={styles.fileMeta}>
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  </div>
+                                  {isTxtFile ? (
+                                    <div>
+                                      <label style={styles.label}>{tx("TXT content", "TXT 內容")}</label>
+                                      <textarea
+                                        rows={5}
+                                        style={{ ...styles.compactTextarea, minHeight: 112, width: "100%", maxWidth: 760 }}
+                                        value={editingTxtDraft}
+                                        onChange={(e) => setEditingTxtDraft(e.target.value)}
+                                      />
+                                    </div>
+                                  ) : null}
                                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                     <button
                                       type="button"
                                       style={secondaryButtonStyle}
-                                      onClick={cancelEditedTxtFile}
+                                      onClick={cancelEditingFile}
                                     >
                                       {tx("Cancel", "取消")}
                                     </button>
                                     <button
                                       type="button"
                                       style={secondaryButtonStyle}
-                                      onClick={saveEditedTxtFile}
+                                      onClick={saveEditedFile}
                                     >
                                       {tx("Save", "保存")}
                                     </button>
                                   </div>
                                 </div>
-                              ) : null}
+                              )}
                             </div>
                           </div>
                           <div style={styles.fileRowActions}>
-                            {isTxtFile && editingTxtIndex !== idx ? (
+                            {!isEditing ? (
                               <button
                                 type="button"
                                 style={secondaryButtonStyle}
-                                onClick={() => void editTxtFile(idx)}
+                                onClick={() => void startEditingFile(idx)}
                               >
                                 {tx("Edit", "編輯")}
                               </button>
@@ -5012,6 +5075,13 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     flex: 1,
   },
+  fileRowActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    alignSelf: "flex-start",
+  },
   filePreviewBox: {
     width: 42,
     height: 56,
@@ -5371,5 +5441,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#607086",
     lineHeight: 1.5,
     wordBreak: "break-all",
+  },
+  shortLinkHistoryVideoTitle: {
+    fontSize: 12,
+    color: "#43556d",
+    lineHeight: 1.5,
+    wordBreak: "break-word",
   },
 };
