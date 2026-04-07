@@ -2343,36 +2343,31 @@ export default function Page() {
         return compact.length > limit ? `${compact.slice(0, limit).trim()}…` : compact;
       };
 
-      const rawTitle = normalizeLine(
-        clip.title.trim() || (hasChinese ? "這段內容的重點整理" : "Key clip summary"),
-        hasChinese ? 28 : 72
-      );
-      const rawDescription = normalizeLine(clip.description.trim(), hasChinese ? 72 : 180);
+      const title = normalizeLine(
+        clip.title.trim() || (hasChinese ? "這段內容重點整理" : "Clip summary"),
+        hasChinese ? 30 : 90
+      )
+        .replace(/^這支短片[:：\-\s]*/i, "")
+        .replace(/^這段影片[:：\-\s]*/i, "")
+        .replace(/^this clip[:\-\s]*/i, "")
+        .replace(/^this video[:\-\s]*/i, "")
+        .trim();
 
-      const refinedTitle = hasChinese
-        ? rawTitle
-            .replace(/^這段影片/i, "")
-            .replace(/^這支短片/i, "")
-            .replace(/[！!]+$/g, "")
-            .trim() || "這段內容的重點整理"
-        : rawTitle
-            .replace(/^this clip\s+/i, "")
-            .replace(/^this video\s+/i, "")
-            .replace(/[!]+$/g, "")
-            .trim() || "Key clip summary";
+      const description = normalizeLine(
+        clip.description.trim(),
+        hasChinese ? 90 : 220
+      )
+        .replace(/^這支短片[:：\-\s]*/i, "")
+        .replace(/^這段影片[:：\-\s]*/i, "")
+        .replace(/^this clip[:\-\s]*/i, "")
+        .replace(/^this video[:\-\s]*/i, "")
+        .trim();
 
-      const refinedDescription = rawDescription
-        ? rawDescription
-            .replace(/^這支短片/i, "")
-            .replace(/^這段影片/i, "")
-            .replace(/^this clip\s+/i, "")
-            .replace(/^this video\s+/i, "")
-            .trim()
-        : hasChinese
-        ? "這段內容把重點交代得很清楚。"
-        : "This clip explains the key point clearly.";
+      if (!description) {
+        return title || (hasChinese ? "這段內容重點整理" : "Clip summary");
+      }
 
-      return [refinedTitle, refinedDescription].filter(Boolean).join("\n");
+      return `${title || (hasChinese ? "這段內容重點整理" : "Clip summary")}\n${description}`;
     },
     []
   );
@@ -4306,7 +4301,24 @@ const generateViralClipText = useCallback(
                     </button>
                   </div>
 
-                  {success ? <div style={activatedSuccessfully ? styles.successCelebrationBox : styles.successBox}>{success}</div> : null}
+                  {success ? (
+                    <div
+                      style={
+                        activatedSuccessfully
+                          ? {
+                              marginTop: 20,
+                              textAlign: "center",
+                              color: "#15803d",
+                              fontWeight: 800,
+                              fontSize: 22,
+                              lineHeight: 1.4,
+                            }
+                          : styles.successBox
+                      }
+                    >
+                      {success}
+                    </div>
+                  ) : null}
                   {error ? <div style={styles.errorBox}>{error}</div> : null}
                 </section>
               </div>
