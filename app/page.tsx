@@ -2337,89 +2337,47 @@ export default function Page() {
   const buildViralClipText = useCallback(
     (clip: ShortsClipOption) => {
       const hasChinese = /[㐀-鿿]/.test(`${clip.title} ${clip.description}`);
-      const rawTitle = clip.title.trim() || (hasChinese ? "這段內容值得看完" : "This clip is worth watching");
-      const rawDescription = clip.description.trim();
-      const normalizeSnippet = (value: string, limit: number) => {
+      const normalizeLine = (value: string, limit: number) => {
         const compact = value.replace(/\s+/g, " ").trim();
         if (!compact) return "";
         return compact.length > limit ? `${compact.slice(0, limit).trim()}…` : compact;
       };
-      const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
-      if (hasChinese) {
-        const titleCore = normalizeSnippet(rawTitle.replace(/[！!？?]+$/g, ""), 24) || "這段內容的核心重點";
-        const descCore = normalizeSnippet(rawDescription, 38);
-        const angles = [
-          `${titleCore}，這支短片直接把重點講清楚`,
-          `想快速弄懂${titleCore}，看這支短片就夠了`,
-          `${titleCore}最值得注意的地方，這裡說得很明白`,
-          `這支短片把${titleCore}的核心直接講出來了`,
-          `關於${titleCore}，這段內容是最容易看懂的一版`,
-          `${titleCore}到底在講什麼，這支短片直接進入主題`,
-        ];
-        const supports = descCore
-          ? [
-              `最有價值的是，它把「${descCore}」這件事說得很清楚。`,
-              `裡面直接抓住「${descCore}」這個關鍵，所以特別值得看。`,
-              `它沒有繞圈子，而是直接把「${descCore}」講到重點。`,
-            ]
-          : [
-              "整段節奏很順，開頭就直接進入重點。",
-              "內容不空泛，幾句話就把核心交代清楚了。",
-              "如果你想快速掌握主題，這支短片很適合先看。",
-            ];
-        const closers = [
-          "看完會更容易抓到整件事的關鍵。",
-          "這類內容最怕講不清楚，但這支短片做到了。",
-          "難得的是，它不誇張，卻很容易讓人想看下去。",
-          "如果你正在找重點版，這支短片會很適合。",
-        ];
-        const variants = [
-          `${pick(angles)}。${pick(supports)}`,
-          `${pick(angles)}，${pick(closers)}`,
-          `${pick(supports)}${pick(closers)}`,
-          `${pick(angles)}。${pick(closers)}`,
-        ];
-        return pick(variants);
-      }
+      const rawTitle = normalizeLine(
+        clip.title.trim() || (hasChinese ? "這段內容的重點整理" : "Key clip summary"),
+        hasChinese ? 28 : 72
+      );
+      const rawDescription = normalizeLine(clip.description.trim(), hasChinese ? 72 : 180);
 
-      const titleCore = normalizeSnippet(rawTitle.replace(/[!?]+$/g, ""), 48) || "this topic";
-      const descCore = normalizeSnippet(rawDescription, 84);
-      const hooks = [
-        `${titleCore} is explained here in a way that is actually easy to follow`,
-        `This clip gets straight to the main point about ${titleCore}`,
-        `If you want the clearest short take on ${titleCore}, start with this clip`,
-        `What makes ${titleCore} interesting is exactly what this clip focuses on`,
-        `This breakdown of ${titleCore} feels direct, clear, and worth watching through`,
-      ];
-      const details = descCore
-        ? [
-            `The best part is how clearly it frames this point: ${descCore}`,
-            `It works because it gets right to the core: ${descCore}`,
-            `Instead of dragging it out, it explains the key point fast: ${descCore}`,
-          ]
-        : [
-            "It feels clear, direct, and easy to stay with.",
-            "It gets to the point quickly without sounding forced.",
-            "The pacing is clean, so the point lands fast.",
-          ];
-      const endings = [
-        "It is the kind of clip that makes people stop and keep watching.",
-        "If you want the quick version without losing the point, this is a strong one.",
-        "This one is easy to click into because the point is clear right away.",
-      ];
-      const variants = [
-        `${pick(hooks)}. ${pick(details)}`,
-        `${pick(hooks)}. ${pick(endings)}`,
-        `${pick(details)} ${pick(endings)}`,
-        `${pick(hooks)} — ${pick(endings)}`,
-      ];
-      return pick(variants);
+      const refinedTitle = hasChinese
+        ? rawTitle
+            .replace(/^這段影片/i, "")
+            .replace(/^這支短片/i, "")
+            .replace(/[！!]+$/g, "")
+            .trim() || "這段內容的重點整理"
+        : rawTitle
+            .replace(/^this clip\s+/i, "")
+            .replace(/^this video\s+/i, "")
+            .replace(/[!]+$/g, "")
+            .trim() || "Key clip summary";
+
+      const refinedDescription = rawDescription
+        ? rawDescription
+            .replace(/^這支短片/i, "")
+            .replace(/^這段影片/i, "")
+            .replace(/^this clip\s+/i, "")
+            .replace(/^this video\s+/i, "")
+            .trim()
+        : hasChinese
+        ? "這段內容把重點交代得很清楚。"
+        : "This clip explains the key point clearly.";
+
+      return [refinedTitle, refinedDescription].filter(Boolean).join("\n");
     },
     []
   );
 
-  const generateViralClipText = useCallback(
+const generateViralClipText = useCallback(
     async (workspaceId: string, clipId: string) => {
       const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
       if (!workspace) return;
