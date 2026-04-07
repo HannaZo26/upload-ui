@@ -449,18 +449,6 @@ const normalizeShortUrlToDomain = (value: string, domain: string) => {
     return `https://${domain}${normalizedPath}`;
   }
 };
-const extractOkurlLinkTitle = (payload: any) =>
-  pickFirstString(
-    payload?.title,
-    payload?.data?.title,
-    payload?.link?.title,
-    payload?.data?.link?.title,
-    payload?.item?.title,
-    payload?.data?.item?.title,
-    payload?.result?.title,
-    payload?.data?.result?.title
-  );
-
 
 const sleep = (ms: number) =>
   new Promise((resolve) => {
@@ -2832,6 +2820,7 @@ const generateViralClipText = useCallback(
         },
         body: JSON.stringify({
           url: urlForShortLink,
+          title: videoTitle.trim() || undefined,
           project_id: Number(selectedProjectId),
           domain_id: selectedDomain.id,
           path_prefix: selectedDomain.pathPrefix || "s",
@@ -2875,9 +2864,7 @@ const generateViralClipText = useCallback(
       }
 
       const normalizedShortUrl = normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN);
-      const fetchedVideoTitle = extractOkurlLinkTitle(data);
       setShortUrl(normalizedShortUrl);
-      setVideoTitle(fetchedVideoTitle);
       setShortUrlCopied(false);
       setShortUrlSuccess("Generated");
 
@@ -2885,7 +2872,7 @@ const generateViralClipText = useCallback(
         originalUrl: longUrl.trim(),
         shortUrl: normalizedShortUrl,
         projectName: selectedProject?.name || "",
-        videoTitle: fetchedVideoTitle,
+        videoTitle: videoTitle.trim(),
         createdAt: Date.now(),
       });
     } catch (err: any) {
@@ -3309,10 +3296,10 @@ const generateViralClipText = useCallback(
                       <div>
                         <label style={styles.label}>{tx("Video Title", "視頻標題")}</label>
                         <input
-                          style={styles.inputReadonly}
+                          style={styles.input}
                           value={videoTitle}
-                          readOnly
-                          placeholder={tx("Will be fetched from OKURL after generation", "生成短鏈接後會自動從 OKURL 抓取")}
+                          onChange={(e) => setVideoTitle(e.target.value)}
+                          placeholder={tx("Paste or edit the OKURL title here", "請貼上或編輯 OKURL 的標題")}
                         />
                       </div>
 
@@ -3400,18 +3387,13 @@ const generateViralClipText = useCallback(
                             <span style={styles.copiedText}>Copied</span>
                           ) : null}
                         </div>
-                        {videoTitle ? (
-                          <div style={styles.shortLinkHistoryVideoTitle}>
-                            {tx("Video Title", "視頻標題")}：{videoTitle}
-                          </div>
-                        ) : null}
                       </div>
 
                       {shortUrlError ? (
                         <div style={styles.errorBox}>{shortUrlError}</div>
                       ) : null}
 
-                      <div style={styles.shortLinkHistoryCard}>
+                      <div style={{ ...styles.shortLinkHistoryCard, gridColumn: "1 / -1" }}>
                         <div style={styles.actionTitle}>
                           {tx("Recent short links", "最近生成的短鏈接")}
                         </div>
@@ -3428,9 +3410,6 @@ const generateViralClipText = useCallback(
                                     <div style={styles.shortLinkHistoryVideoTitle}>
                                       {tx("Video Title", "視頻標題")}：{item.videoTitle}
                                     </div>
-                                  ) : null}
-                                  {item.originalUrl ? (
-                                    <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
                                   ) : null}
                                 </div>
                               </div>
@@ -5431,17 +5410,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   shortLinkHistoryList: {
     display: "grid",
-    gap: 8,
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 10,
+    width: "100%",
   },
   shortLinkHistoryRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: "8px 10px",
+    display: "grid",
+    gap: 6,
+    minWidth: 0,
+    padding: "10px 12px",
     border: "1px solid #e6eef9",
-    borderRadius: 12,
+    borderRadius: 14,
     background: "#f8fbff",
+    alignContent: "start",
   },
   shortLinkHistoryProject: {
     fontSize: 12,
