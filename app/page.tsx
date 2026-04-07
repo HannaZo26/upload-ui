@@ -449,6 +449,18 @@ const normalizeShortUrlToDomain = (value: string, domain: string) => {
     return `https://${domain}${normalizedPath}`;
   }
 };
+const extractOkurlLinkTitle = (payload: any) =>
+  pickFirstString(
+    payload?.title,
+    payload?.data?.title,
+    payload?.link?.title,
+    payload?.data?.link?.title,
+    payload?.item?.title,
+    payload?.data?.item?.title,
+    payload?.result?.title,
+    payload?.data?.result?.title
+  );
+
 
 const sleep = (ms: number) =>
   new Promise((resolve) => {
@@ -2820,7 +2832,6 @@ const generateViralClipText = useCallback(
         },
         body: JSON.stringify({
           url: urlForShortLink,
-          title: videoTitle.trim() || undefined,
           project_id: Number(selectedProjectId),
           domain_id: selectedDomain.id,
           path_prefix: selectedDomain.pathPrefix || "s",
@@ -2864,7 +2875,9 @@ const generateViralClipText = useCallback(
       }
 
       const normalizedShortUrl = normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN);
+      const fetchedVideoTitle = extractOkurlLinkTitle(data);
       setShortUrl(normalizedShortUrl);
+      setVideoTitle(fetchedVideoTitle);
       setShortUrlCopied(false);
       setShortUrlSuccess("Generated");
 
@@ -2872,7 +2885,7 @@ const generateViralClipText = useCallback(
         originalUrl: longUrl.trim(),
         shortUrl: normalizedShortUrl,
         projectName: selectedProject?.name || "",
-        videoTitle: videoTitle.trim(),
+        videoTitle: fetchedVideoTitle,
         createdAt: Date.now(),
       });
     } catch (err: any) {
@@ -3296,10 +3309,10 @@ const generateViralClipText = useCallback(
                       <div>
                         <label style={styles.label}>{tx("Video Title", "視頻標題")}</label>
                         <input
-                          style={styles.input}
+                          style={styles.inputReadonly}
                           value={videoTitle}
-                          onChange={(e) => setVideoTitle(e.target.value)}
-                          placeholder={tx("Paste or edit the OKURL title here", "請貼上或編輯 OKURL 的標題")}
+                          readOnly
+                          placeholder={tx("Will be fetched from OKURL after generation", "生成短鏈接後會自動從 OKURL 抓取")}
                         />
                       </div>
 
@@ -3387,6 +3400,11 @@ const generateViralClipText = useCallback(
                             <span style={styles.copiedText}>Copied</span>
                           ) : null}
                         </div>
+                        {videoTitle ? (
+                          <div style={styles.shortLinkHistoryVideoTitle}>
+                            {tx("Video Title", "視頻標題")}：{videoTitle}
+                          </div>
+                        ) : null}
                       </div>
 
                       {shortUrlError ? (
@@ -3410,6 +3428,9 @@ const generateViralClipText = useCallback(
                                     <div style={styles.shortLinkHistoryVideoTitle}>
                                       {tx("Video Title", "視頻標題")}：{item.videoTitle}
                                     </div>
+                                  ) : null}
+                                  {item.originalUrl ? (
+                                    <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
                                   ) : null}
                                 </div>
                               </div>
