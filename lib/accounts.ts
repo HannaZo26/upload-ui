@@ -56,7 +56,7 @@ haiyennt: {
   },
 
   minhduc: {
-    password: "He#ge65eK53",
+    password: "He&t65eK53",
     folders: [
       "tastefulworldzh",
       "feelgoodbeautyzh",
