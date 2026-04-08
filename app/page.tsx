@@ -3731,32 +3731,9 @@ const generateViralClipText = useCallback(
                                       style={styles.input}
                                       value={workspace.sourceUrl}
                                       onChange={(e) => {
-                                        const nextSourceUrl = e.target.value;
                                         setActiveShortsWorkspaceId(workspace.workspaceId);
-                                        updateShortsWorkspace(workspace.workspaceId, (currentWorkspace) => {
-                                          const sourceChanged =
-                                            currentWorkspace.sourceUrl.trim() !== nextSourceUrl.trim();
-
-                                          return {
-                                            sourceUrl: nextSourceUrl,
-                                            ...(sourceChanged
-                                              ? {
-                                                  clips: [],
-                                                  selectedShortIds: [],
-                                                  uploadedClipIds: [],
-                                                  generatingShorts: false,
-                                                  downloadingShorts: false,
-                                                  addingShortsToUploads: false,
-                                                  shortsAddedToUploads: false,
-                                                  successMessage: "",
-                                                  errorMessage: "",
-                                                  copiedClipActionKey: "",
-                                                  jobId: "",
-                                                  jobStatus: "",
-                                                  jobProgress: null,
-                                                }
-                                              : {}),
-                                          };
+                                        updateShortsWorkspace(workspace.workspaceId, {
+                                          sourceUrl: e.target.value,
                                         });
                                       }}
                                       placeholder={tx("Paste the long video URL here", "請貼上 long video URL")}
@@ -3991,13 +3968,6 @@ const generateViralClipText = useCallback(
                                         {workspace.addingTxtsToUploads
                                           ? tx("Adding TXT...", "正在加入 TXT...")
                                           : tx("Add TXT to Upload files", "加入 TXT 到上傳文件")}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        style={styles.secondaryButton}
-                                        onClick={() => downloadTxt(workspace.workspaceId)}
-                                      >
-                                        {tx("Download all TXT", "下載全部 TXT")}
                                       </button>
                                       {workspace.txtsAddedToUploads ? (
                                         <span style={styles.copiedText}>{tx("Added ✓", "已加入 ✓")}</span>
