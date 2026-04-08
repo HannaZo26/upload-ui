@@ -435,6 +435,26 @@ const buildUrlWithUtm = (
   }
 };
 
+const sanitizeGanJingWorldUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.trim().toLowerCase();
+
+    if (host.includes("ganjingworld.com")) {
+      ["playlist_id", "playlistId", "list", "index", "feature", "si"].forEach((key) =>
+        parsed.searchParams.delete(key)
+      );
+    }
+
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+};
+
 const normalizeShortUrlToDomain = (value: string, domain: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -948,7 +968,7 @@ export default function Page() {
   }, [utmFields]);
 
   const longUrlWithUtm = useMemo(() => {
-    return buildUrlWithUtm(longUrl, utmFields, signUpWallEnabled);
+    return buildUrlWithUtm(sanitizeGanJingWorldUrl(longUrl), utmFields, signUpWallEnabled);
   }, [longUrl, signUpWallEnabled, utmFields]);
 
   const combinedTxtNotes = useMemo(() => {
@@ -2161,7 +2181,9 @@ export default function Page() {
       shortsAddedToUploads: false,
     });
 
-    if (!workspace.sourceUrl.trim()) {
+    const cleanedSourceUrl = sanitizeGanJingWorldUrl(workspace.sourceUrl);
+
+    if (!cleanedSourceUrl) {
       updateShortsWorkspace(workspaceId, {
         errorMessage: "Please enter the long-video URL first.",
       });
@@ -2250,7 +2272,7 @@ export default function Page() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            source_url: workspace.sourceUrl.trim(),
+            source_url: cleanedSourceUrl,
             options: shortsOptions,
           }),
         });
@@ -2291,7 +2313,7 @@ export default function Page() {
       persistShortsHistoryEntry({
         workspaceId,
         jobId,
-        sourceUrl: workspace.sourceUrl.trim(),
+        sourceUrl: cleanedSourceUrl,
         mode: workspace.mode,
         rangeStart: workspace.rangeStart,
         rangeEnd: workspace.rangeEnd,
@@ -2823,7 +2845,8 @@ const generateViralClipText = useCallback(
     try {
       setCreatingShortUrl(true);
 
-      const urlForShortLink = longUrlWithUtm || longUrl.trim();
+      const cleanedLongUrl = sanitizeGanJingWorldUrl(longUrl);
+      const urlForShortLink = longUrlWithUtm || cleanedLongUrl;
 
       const res = await fetch("/api/okurl-create", {
         method: "POST",
@@ -2882,7 +2905,7 @@ const generateViralClipText = useCallback(
       setShortUrlSuccess("Generated");
 
       persistShortLinkHistoryEntry({
-        originalUrl: longUrl.trim(),
+        originalUrl: cleanedLongUrl,
         shortUrl: normalizedShortUrl,
         projectName: selectedProject?.name || "",
         videoTitle: fetchedVideoTitle,
@@ -2945,6 +2968,7 @@ const generateViralClipText = useCallback(
     }
 
     const effectiveFolderName = folderName || pageName;
+    const cleanedLongUrl = sanitizeGanJingWorldUrl(longUrl);
 
     if (!pageName || !effectiveFolderName) {
       setError("Please choose a Facebook Page.");
@@ -2972,7 +2996,7 @@ const generateViralClipText = useCallback(
       formData.append("folder_name", effectiveFolderName);
       formData.append("facebook_page", pageName);
       formData.append("title", videoTitle.trim());
-      formData.append("target_url", longUrlWithUtm || longUrl);
+      formData.append("target_url", longUrlWithUtm || cleanedLongUrl);
       formData.append("notes", combinedTxtNotes);
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
@@ -3276,6 +3300,40 @@ const generateViralClipText = useCallback(
                         readOnly
                       />
                     </div>
+
+                  <div style={styles.shortLinkHistoryCard}>
+                    <div style={styles.actionTitle}>
+                      {tx("Recent short links", "最近生成的短鏈接")}
+                    </div>
+                    {shortLinkHistory.length ? (
+                      <div style={styles.shortLinkHistoryList}>
+                        {shortLinkHistory.map((item, index) => (
+                          <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryRow}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={styles.shortLinkHistoryProject}>
+                                {item.projectName || tx("Unknown project", "未命名項目")}
+                              </div>
+                              <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
+                              {item.videoTitle ? (
+                                <div style={styles.shortLinkHistoryVideoTitle}>
+                                  {tx("Video Title", "視頻標題")}：{item.videoTitle}
+                                </div>
+                              ) : null}
+                              {item.originalUrl ? (
+                                <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={styles.helperText}>
+                        {tx(
+                          "Your 5 most recent short links will appear here.",
+                          "這裡會顯示最近生成的 5 筆短鏈接。"
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
 
@@ -3400,51 +3458,12 @@ const generateViralClipText = useCallback(
                             <span style={styles.copiedText}>Copied</span>
                           ) : null}
                         </div>
-                        {videoTitle ? (
-                          <div style={styles.shortLinkHistoryVideoTitle}>
-                            {tx("Video Title", "視頻標題")}：{videoTitle}
-                          </div>
-                        ) : null}
                       </div>
 
                       {shortUrlError ? (
                         <div style={styles.errorBox}>{shortUrlError}</div>
                       ) : null}
 
-                      <div style={styles.shortLinkHistoryCard}>
-                        <div style={styles.actionTitle}>
-                          {tx("Recent short links", "最近生成的短鏈接")}
-                        </div>
-                        {shortLinkHistory.length ? (
-                          <div style={styles.shortLinkHistoryList}>
-                            {shortLinkHistory.map((item, index) => (
-                              <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryRow}>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={styles.shortLinkHistoryProject}>
-                                    {item.projectName || tx("Unknown project", "未命名項目")}
-                                  </div>
-                                  <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
-                                  {item.videoTitle ? (
-                                    <div style={styles.shortLinkHistoryVideoTitle}>
-                                      {tx("Video Title", "視頻標題")}：{item.videoTitle}
-                                    </div>
-                                  ) : null}
-                                  {item.originalUrl ? (
-                                    <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={styles.helperText}>
-                            {tx(
-                              "Your 5 most recent short links will appear here.",
-                              "這裡會顯示最近生成的 5 筆短鏈接。"
-                            )}
-                          </div>
-                        )}
-                      </div>
                     </div>
 
                     <div style={styles.utmBuilderCard}>
@@ -3712,9 +3731,32 @@ const generateViralClipText = useCallback(
                                       style={styles.input}
                                       value={workspace.sourceUrl}
                                       onChange={(e) => {
+                                        const nextSourceUrl = e.target.value;
                                         setActiveShortsWorkspaceId(workspace.workspaceId);
-                                        updateShortsWorkspace(workspace.workspaceId, {
-                                          sourceUrl: e.target.value,
+                                        updateShortsWorkspace(workspace.workspaceId, (currentWorkspace) => {
+                                          const sourceChanged =
+                                            currentWorkspace.sourceUrl.trim() !== nextSourceUrl.trim();
+
+                                          return {
+                                            sourceUrl: nextSourceUrl,
+                                            ...(sourceChanged
+                                              ? {
+                                                  clips: [],
+                                                  selectedShortIds: [],
+                                                  uploadedClipIds: [],
+                                                  generatingShorts: false,
+                                                  downloadingShorts: false,
+                                                  addingShortsToUploads: false,
+                                                  shortsAddedToUploads: false,
+                                                  successMessage: "",
+                                                  errorMessage: "",
+                                                  copiedClipActionKey: "",
+                                                  jobId: "",
+                                                  jobStatus: "",
+                                                  jobProgress: null,
+                                                }
+                                              : {}),
+                                          };
                                         });
                                       }}
                                       placeholder={tx("Paste the long video URL here", "請貼上 long video URL")}
@@ -5427,21 +5469,22 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#ffffff",
     padding: 14,
     display: "grid",
-    gap: 8,
+    gap: 10,
   },
   shortLinkHistoryList: {
     display: "grid",
-    gap: 8,
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 10,
   },
   shortLinkHistoryRow: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 12,
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "1px solid #e6eef9",
     borderRadius: 12,
     background: "#f8fbff",
+    minWidth: 0,
   },
   shortLinkHistoryProject: {
     fontSize: 12,
