@@ -98,15 +98,155 @@ export const extractContentId = (value: string) => {
   }
 };
 
-export const normalizeShortsgenStatus = (data: any) =>
-  pickFirstString(
-    data?.status,
-    data?.job_status,
-    data?.state,
-    data?.data?.status,
-    data?.data?.job_status,
-    data?.data?.state
-  ).toUpperCase();
+const hasShortsgenResultPayload = (data: any) => {
+  const resultArrays = [
+    data?.result?.shorts,
+    data?.data?.result?.shorts,
+    data?.result?.results,
+    data?.data?.result?.results,
+    data?.results,
+    data?.data?.results,
+    data?.clips,
+    data?.data?.clips,
+    data?.items,
+    data?.data?.items,
+    data?.result?.items,
+    data?.data?.result?.items,
+    data?.result?.data,
+    data?.data?.result?.data,
+    data?.output,
+    data?.data?.output,
+  ].some((value) => Array.isArray(value) && value.length > 0);
+
+  const directUrl = pickFirstString(
+    data?.shorts_url,
+    data?.shortsUrl,
+    data?.short_url,
+    data?.url,
+    data?.download_url,
+    data?.downloadUrl,
+    data?.data?.shorts_url,
+    data?.data?.shortsUrl,
+    data?.data?.short_url,
+    data?.data?.url,
+    data?.data?.download_url,
+    data?.data?.downloadUrl
+  );
+
+  return resultArrays || Boolean(directUrl);
+};
+
+const normalizeStatusToken = (value: string) =>
+  value.trim().replace(/[\s-]+/g, "_").replace(/_+/g, "_").toUpperCase();
+
+const getShortsgenStatusCandidates = (data: any) => [
+  { value: data?.data?.job_status, source: "job" as const },
+  { value: data?.data?.jobStatus, source: "job" as const },
+  { value: data?.data?.task_status, source: "job" as const },
+  { value: data?.data?.taskStatus, source: "job" as const },
+  { value: data?.data?.state, source: "job" as const },
+  { value: data?.data?.status, source: "job" as const },
+  { value: data?.result?.job_status, source: "job" as const },
+  { value: data?.result?.jobStatus, source: "job" as const },
+  { value: data?.result?.task_status, source: "job" as const },
+  { value: data?.result?.taskStatus, source: "job" as const },
+  { value: data?.result?.state, source: "job" as const },
+  { value: data?.result?.status, source: "job" as const },
+  { value: data?.job?.status, source: "job" as const },
+  { value: data?.job?.state, source: "job" as const },
+  { value: data?.progress?.status, source: "job" as const },
+  { value: data?.progress?.state, source: "job" as const },
+  { value: data?.job_status, source: "job" as const },
+  { value: data?.jobStatus, source: "job" as const },
+  { value: data?.task_status, source: "job" as const },
+  { value: data?.taskStatus, source: "job" as const },
+  { value: data?.state, source: "job" as const },
+  { value: data?.status, source: "transport" as const },
+];
+
+const mapShortsgenStatus = (
+  rawStatus: string,
+  source: "job" | "transport",
+  progress: number | null,
+  hasResults: boolean
+) => {
+  const normalized = normalizeStatusToken(rawStatus);
+
+  if (
+    [
+      "QUEUED",
+      "QUEUE",
+      "PENDING",
+      "WAITING",
+      "SCHEDULED",
+      "CREATED",
+      "SUBMITTED",
+    ].includes(normalized)
+  ) {
+    return "SCHEDULED";
+  }
+
+  if (
+    [
+      "IN_PROGRESS",
+      "INPROGRESS",
+      "PROCESSING",
+      "RUNNING",
+      "STARTED",
+      "STARTING",
+      "GENERATING",
+      "WORKING",
+    ].includes(normalized)
+  ) {
+    return "IN_PROGRESS";
+  }
+
+  if (normalized === "READY_TO_REFRESH") {
+    return normalized;
+  }
+
+  if (
+    [
+      "FAILED",
+      "FAIL",
+      "FAILURE",
+      "ERROR",
+      "CANCELLED",
+      "CANCELED",
+      "ABORTED",
+      "REJECTED",
+      "TIMED_OUT",
+      "TIMEOUT",
+    ].includes(normalized)
+  ) {
+    return "FAILED";
+  }
+
+  if (
+    [
+      "COMPLETED",
+      "COMPLETE",
+      "DONE",
+      "FINISHED",
+      "READY",
+    ].includes(normalized)
+  ) {
+    return "COMPLETED";
+  }
+
+  if (["SUCCEEDED", "SUCCEED", "SUCCESS", "OK", "PASSED", "PASS"].includes(normalized)) {
+    if (source === "job" || hasResults || progress === 100) {
+      return "COMPLETED";
+    }
+    return "";
+  }
+
+  if (progress === 100 && source === "job") {
+    return "COMPLETED";
+  }
+
+  return source === "job" ? normalized : "";
+};
 
 export const normalizeShortsgenProgress = (data: any) => {
   const rawProgress = pickFirstNumber(
@@ -126,9 +266,21 @@ export const normalizeShortsgenProgress = (data: any) => {
     data?.data?.percentage,
     data?.data?.percent,
     data?.data?.completion,
+    data?.data?.completed_percent,
+    data?.data?.completedPercent,
+    data?.result?.progress,
+    data?.result?.progress_pct,
+    data?.result?.progress_percent,
+    data?.result?.progressPercentage,
+    data?.result?.percentage,
+    data?.result?.percent,
+    data?.result?.completion,
     data?.progress?.processPercentage,
     data?.progress?.progress,
-    data?.progress?.percentage
+    data?.progress?.percentage,
+    data?.data?.progress?.processPercentage,
+    data?.data?.progress?.progress,
+    data?.data?.progress?.percentage
   );
 
   if (rawProgress !== null) {
@@ -139,21 +291,29 @@ export const normalizeShortsgenProgress = (data: any) => {
     return Math.max(0, Math.min(100, Math.round(rawProgress)));
   }
 
-  const taskProgress = Array.isArray(data?.progress?.tasks)
-    ? data.progress.tasks
-        .map((task: any) =>
-          pickFirstNumber(
-            task?.processPercentage,
-            task?.progress,
-            task?.progress_pct,
-            task?.progress_percent,
-            task?.percentage,
-            task?.percent,
-            task?.completion
-          )
-        )
-        .filter((value: number | null): value is number => value !== null)
-    : [];
+  const taskCollections = [
+    data?.progress?.tasks,
+    data?.data?.progress?.tasks,
+    data?.result?.progress?.tasks,
+    data?.tasks,
+    data?.data?.tasks,
+    data?.result?.tasks,
+  ].filter(Array.isArray) as any[][];
+
+  const taskProgress = taskCollections
+    .flat()
+    .map((task: any) =>
+      pickFirstNumber(
+        task?.processPercentage,
+        task?.progress,
+        task?.progress_pct,
+        task?.progress_percent,
+        task?.percentage,
+        task?.percent,
+        task?.completion
+      )
+    )
+    .filter((value: number | null): value is number => value !== null);
 
   if (!taskProgress.length) return null;
 
@@ -164,6 +324,37 @@ export const normalizeShortsgenProgress = (data: any) => {
   }
 
   return Math.max(0, Math.min(100, Math.round(latestProgress)));
+};
+
+export const normalizeShortsgenStatus = (data: any) => {
+  const progress = normalizeShortsgenProgress(data);
+  const hasResults = hasShortsgenResultPayload(data);
+
+  if (hasResults) {
+    return "COMPLETED";
+  }
+
+  for (const candidate of getShortsgenStatusCandidates(data)) {
+    const rawStatus = pickFirstString(candidate.value);
+    if (!rawStatus) continue;
+
+    const normalized = mapShortsgenStatus(
+      rawStatus,
+      candidate.source,
+      progress,
+      hasResults
+    );
+
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  if (progress === 100) {
+    return "COMPLETED";
+  }
+
+  return "";
 };
 
 const formatSeconds = (totalSeconds: number | null) => {
@@ -335,6 +526,12 @@ const coerceResultsArray = (data: any) => {
   if (Array.isArray(data?.data?.clips)) return data.data.clips;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.result?.items)) return data.result.items;
+  if (Array.isArray(data?.data?.result?.items)) return data.data.result.items;
+  if (Array.isArray(data?.result?.data)) return data.result.data;
+  if (Array.isArray(data?.data?.result?.data)) return data.data.result.data;
+  if (Array.isArray(data?.output)) return data.output;
+  if (Array.isArray(data?.data?.output)) return data.data.output;
   if (Array.isArray(data?.data)) return data.data;
 
   const directUrl = pickFirstString(
@@ -353,13 +550,37 @@ const coerceResultsArray = (data: any) => {
 export const normalizeShortsgenResults = (data: any): NormalizedShortsClip[] => {
   const clips = coerceResultsArray(data)
     .map((item: any, index: number) => {
+      if (typeof item === "string") {
+        return {
+          id: `clip-${index + 1}`,
+          title: `Short clip ${index + 1}`,
+          description: "",
+          duration: "Auto clip",
+          angle: "AI-selected highlight",
+          downloadUrl: item,
+          thumbnailUrl: "",
+          qualityLabel: deriveQualityLabel(Math.max(0, 100 - index * 8)),
+          qualityScore: Math.max(0, 100 - index * 8),
+          rank: index + 1,
+        };
+      }
+
       const downloadUrl = pickFirstString(
         item?.shorts_url,
         item?.shortsUrl,
         item?.short_url,
         item?.url,
         item?.download_url,
-        item?.downloadUrl
+        item?.downloadUrl,
+        item?.video_url,
+        item?.videoUrl,
+        item?.media?.url,
+        item?.video?.url,
+        item?.resource?.url,
+        item?.file?.url,
+        item?.download?.url,
+        item?.output_url,
+        item?.outputUrl
       );
 
       if (!downloadUrl) return null;
@@ -370,7 +591,11 @@ export const normalizeShortsgenResults = (data: any): NormalizedShortsClip[] => 
         item?.thumbnail_url,
         item?.thumbnailUrl,
         item?.thumb_url,
-        item?.poster_url
+        item?.poster_url,
+        item?.posterUrl,
+        item?.thumbnail?.url,
+        item?.thumb?.url,
+        item?.image?.url
       );
 
       const qualityScore = deriveQualityScore(item, index);
