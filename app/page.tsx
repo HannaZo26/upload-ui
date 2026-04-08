@@ -3300,6 +3300,7 @@ const generateViralClipText = useCallback(
                         readOnly
                       />
                     </div>
+                  </div>
                 </section>
 
                 <section style={panelStyle}>
