@@ -3734,7 +3734,18 @@ const generateViralClipText = useCallback(
                     {shortLinkHistory.length ? (
                       <div style={styles.shortLinkHistoryListWide}>
                         {shortLinkHistory.map((item, index) => (
-                          <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryWideRow}>
+                          <div
+                            key={`${item.shortUrl}-${index}`}
+                            style={{
+                              ...styles.shortLinkHistoryWideRow,
+                              paddingBottom: index < shortLinkHistory.length - 1 ? 12 : 0,
+                              marginBottom: index < shortLinkHistory.length - 1 ? 12 : 0,
+                              borderBottom:
+                                index < shortLinkHistory.length - 1
+                                  ? "1px dashed #d9e4f3"
+                                  : "none",
+                            }}
+                          >
                             <div style={{ minWidth: 0 }}>
                               <div style={styles.shortLinkHistoryProject}>
                                 {item.projectName || tx("Unknown project", "未命名項目")}
