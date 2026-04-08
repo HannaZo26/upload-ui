@@ -4150,6 +4150,13 @@ const generateViralClipText = useCallback(
                                     <div style={styles.inlineActions}>
                                       <button
                                         type="button"
+                                        style={secondaryButtonStyle}
+                                        onClick={() => downloadTxt(workspace.workspaceId)}
+                                      >
+                                        {tx("Download all TXT files", "下載全部 TXT 文件")}
+                                      </button>
+                                      <button
+                                        type="button"
                                         style={{
                                           ...styles.primaryButton,
                                           opacity: workspace.addingTxtsToUploads ? 0.7 : 1,
