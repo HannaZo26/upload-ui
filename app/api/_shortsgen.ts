@@ -326,6 +326,62 @@ export const normalizeShortsgenProgress = (data: any) => {
   return Math.max(0, Math.min(100, Math.round(latestProgress)));
 };
 
+export const extractShortsgenError = (data: any) => {
+  const taskErrorCollections = [
+    data?.progress?.tasks,
+    data?.data?.progress?.tasks,
+    data?.result?.progress?.tasks,
+    data?.tasks,
+    data?.data?.tasks,
+    data?.result?.tasks,
+  ].filter(Array.isArray) as any[][];
+
+  const taskErrors = taskErrorCollections
+    .flat()
+    .map((task: any) =>
+      pickFirstString(
+        task?.error,
+        task?.message,
+        task?.detail,
+        task?.internal_error,
+        task?.internalError
+      )
+    )
+    .filter(Boolean);
+
+  return (
+    pickFirstString(
+      data?.error,
+      data?.message,
+      data?.msg,
+      data?.detail,
+      data?.progress?.error,
+      data?.progress?.message,
+      data?.data?.error,
+      data?.data?.message,
+      data?.data?.msg,
+      data?.data?.detail,
+      data?.data?.progress?.error,
+      data?.data?.progress?.message,
+      data?.result?.error,
+      data?.result?.message,
+      data?.result?.msg,
+      data?.result?.detail,
+      data?.result?.progress?.error,
+      data?.result?.progress?.message,
+      data?.context?.error,
+      data?.context?.message,
+      data?.context?.download?.internal_error,
+      data?.context?.download?.internalError,
+      data?.data?.context?.error,
+      data?.data?.context?.message,
+      data?.data?.context?.download?.internal_error,
+      data?.data?.context?.download?.internalError,
+      taskErrors[0]
+    ) || ""
+  );
+};
+
 export const normalizeShortsgenStatus = (data: any) => {
   const progress = normalizeShortsgenProgress(data);
   const hasResults = hasShortsgenResultPayload(data);
