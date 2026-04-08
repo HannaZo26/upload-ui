@@ -3568,8 +3568,19 @@ const generateViralClipText = useCallback(
                                 {item.projectName || tx("Unknown project", "未命名項目")}
                               </div>
                               <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
-                              {item.originalUrl ? (
-                                <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
+                              {(item.originalUrl || item.videoTitle) ? (
+                                <div style={styles.shortLinkHistoryMetaRow}>
+                                  {item.originalUrl ? (
+                                    <div style={{ ...styles.shortLinkHistoryOrigin, flex: 1 }}>
+                                      {item.originalUrl}
+                                    </div>
+                                  ) : null}
+                                  {item.videoTitle ? (
+                                    <div style={styles.shortLinkHistoryVideoTitleInline}>
+                                      {item.videoTitle}
+                                    </div>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
                           </div>
@@ -5472,10 +5483,32 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     wordBreak: "break-all",
   },
+  shortLinkHistoryMetaRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    flexWrap: "wrap",
+    marginTop: 6,
+    paddingTop: 6,
+    borderTop: "1px solid #edf3fb",
+  },
   shortLinkHistoryVideoTitle: {
     fontSize: 12,
     color: "#43556d",
     lineHeight: 1.5,
     wordBreak: "break-word",
+  },
+  shortLinkHistoryVideoTitleInline: {
+    fontSize: 12,
+    color: "#43556d",
+    lineHeight: 1.5,
+    wordBreak: "break-word",
+    whiteSpace: "nowrap",
+    maxWidth: "40%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    fontWeight: 700,
+    paddingLeft: 12,
+    borderLeft: "1px solid #dde7f5",
   },
 };
