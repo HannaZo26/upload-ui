@@ -775,7 +775,8 @@ const uploadFilesToCloudflare = async (input: {
 
   const uploadedFiles: CloudflareUploadPlanFile[] = [];
 
-  for (const [index, plannedFile] of input.uploadSession.files.entries()) {
+  for (let index = 0; index < input.uploadSession.files.length; index += 1) {
+    const plannedFile = input.uploadSession.files[index];
     const localFile = localFileMap.get(plannedFile.clientId);
 
     if (!localFile) {
