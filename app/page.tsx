@@ -80,6 +80,7 @@ type ShortLinkHistoryEntry = {
   originalUrl: string;
   shortUrl: string;
   projectName: string;
+  videoTitle: string;
   createdAt: number;
 };
 
@@ -434,6 +435,26 @@ const buildUrlWithUtm = (
   }
 };
 
+const sanitizeGanJingWorldUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.trim().toLowerCase();
+
+    if (host.includes("ganjingworld.com")) {
+      ["playlist_id", "playlistId", "list", "index", "feature", "si"].forEach((key) =>
+        parsed.searchParams.delete(key)
+      );
+    }
+
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+};
+
 const normalizeShortUrlToDomain = (value: string, domain: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -448,6 +469,18 @@ const normalizeShortUrlToDomain = (value: string, domain: string) => {
     return `https://${domain}${normalizedPath}`;
   }
 };
+const extractOkurlLinkTitle = (payload: any) =>
+  pickFirstString(
+    payload?.title,
+    payload?.data?.title,
+    payload?.link?.title,
+    payload?.data?.link?.title,
+    payload?.item?.title,
+    payload?.data?.item?.title,
+    payload?.result?.title,
+    payload?.data?.result?.title
+  );
+
 
 const sleep = (ms: number) =>
   new Promise((resolve) => {
@@ -782,7 +815,8 @@ export default function Page() {
   const [files, setFiles] = useState<UploadableFile[]>([]);
   const [filePreviewUrls, setFilePreviewUrls] = useState<Record<string, string>>({});
   const [txtPreviewSnippets, setTxtPreviewSnippets] = useState<Record<string, string>>({});
-  const [editingTxtIndex, setEditingTxtIndex] = useState<number | null>(null);
+  const [editingFileIndex, setEditingFileIndex] = useState<number | null>(null);
+  const [editingFileNameDraft, setEditingFileNameDraft] = useState("");
   const [editingTxtDraft, setEditingTxtDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
@@ -790,6 +824,7 @@ export default function Page() {
   const [activatedSuccessfully, setActivatedSuccessfully] = useState(false);
 
   const [longUrl, setLongUrl] = useState("");
+  const [videoTitle, setVideoTitle] = useState("");
   const [customSlug, setCustomSlug] = useState("");
   const [signUpWallEnabled, setSignUpWallEnabled] = useState(false);
   const [shortUrl, setShortUrl] = useState("");
@@ -933,7 +968,7 @@ export default function Page() {
   }, [utmFields]);
 
   const longUrlWithUtm = useMemo(() => {
-    return buildUrlWithUtm(longUrl, utmFields, signUpWallEnabled);
+    return buildUrlWithUtm(sanitizeGanJingWorldUrl(longUrl), utmFields, signUpWallEnabled);
   }, [longUrl, signUpWallEnabled, utmFields]);
 
   const combinedTxtNotes = useMemo(() => {
@@ -1459,6 +1494,7 @@ export default function Page() {
   const resetUploadForm = () => {
     setFiles([]);
     setLongUrl("");
+    setVideoTitle("");
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
@@ -1543,6 +1579,7 @@ export default function Page() {
     setError("");
     setAuthError("");
     setLongUrl("");
+    setVideoTitle("");
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
@@ -1589,49 +1626,65 @@ export default function Page() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const editTxtFile = async (index: number) => {
+  const startEditingFile = async (index: number) => {
     const targetFile = files[index];
     if (!targetFile) return;
 
     const isTxtFile =
       targetFile.type.startsWith("text/") || /\.txt$/i.test(targetFile.name);
-    if (!isTxtFile) return;
 
-    try {
-      const currentContent = await targetFile.text();
-      setEditingTxtIndex(index);
-      setEditingTxtDraft(currentContent.replace(/^﻿/, ""));
-    } catch (err) {
-      setError(
-        lang === "zh" ? "TXT 文件暫時無法編輯，請稍後再試。" : "Unable to edit this TXT file right now."
-      );
-      setSuccess("");
+    setEditingFileIndex(index);
+    setEditingFileNameDraft(targetFile.name);
+
+    if (isTxtFile) {
+      try {
+        const currentContent = await targetFile.text();
+        setEditingTxtDraft(currentContent.replace(/^﻿/, ""));
+      } catch (err) {
+        setError(
+          lang === "zh" ? "TXT 文件暫時無法編輯，請稍後再試。" : "Unable to edit this TXT file right now."
+        );
+        setSuccess("");
+      }
+    } else {
+      setEditingTxtDraft("");
     }
   };
 
-  const saveEditedTxtFile = () => {
-    if (editingTxtIndex === null) return;
-    const targetFile = files[editingTxtIndex];
+  const saveEditedFile = () => {
+    if (editingFileIndex === null) return;
+    const targetFile = files[editingFileIndex];
     if (!targetFile) return;
 
-    const updatedFile = new File(["﻿" + editingTxtDraft], targetFile.name, {
-      type: "text/plain;charset=utf-8",
-      lastModified: Date.now(),
-    }) as UploadableFile;
+    const trimmedName = editingFileNameDraft.trim() || targetFile.name;
+    const isTxtFile =
+      targetFile.type.startsWith("text/") || /\.txt$/i.test(targetFile.name);
+
+    const updatedFile = isTxtFile
+      ? (new File(["﻿" + editingTxtDraft], trimmedName, {
+          type: "text/plain;charset=utf-8",
+          lastModified: Date.now(),
+        }) as UploadableFile)
+      : (new File([targetFile], trimmedName, {
+          type: targetFile.type || "video/mp4",
+          lastModified: Date.now(),
+        }) as UploadableFile);
 
     if (targetFile.originalTitle) {
       updatedFile.originalTitle = targetFile.originalTitle;
     }
 
     setFiles((prev) =>
-      prev.map((file, fileIndex) => (fileIndex === editingTxtIndex ? updatedFile : file))
+      prev.map((file, fileIndex) => (fileIndex === editingFileIndex ? updatedFile : file))
     );
-    setEditingTxtIndex(null);
+    setEditingFileIndex(null);
+    setEditingFileNameDraft("");
     setEditingTxtDraft("");
   };
 
-  const cancelEditedTxtFile = () => {
-    setEditingTxtIndex(null);
+  const cancelEditingFile = () => {
+    setEditingFileIndex(null);
+    setEditingFileNameDraft("");
     setEditingTxtDraft("");
   };
 
@@ -2128,7 +2181,9 @@ export default function Page() {
       shortsAddedToUploads: false,
     });
 
-    if (!workspace.sourceUrl.trim()) {
+    const cleanedSourceUrl = sanitizeGanJingWorldUrl(workspace.sourceUrl);
+
+    if (!cleanedSourceUrl) {
       updateShortsWorkspace(workspaceId, {
         errorMessage: "Please enter the long-video URL first.",
       });
@@ -2217,7 +2272,7 @@ export default function Page() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            source_url: workspace.sourceUrl.trim(),
+            source_url: cleanedSourceUrl,
             options: shortsOptions,
           }),
         });
@@ -2258,7 +2313,7 @@ export default function Page() {
       persistShortsHistoryEntry({
         workspaceId,
         jobId,
-        sourceUrl: workspace.sourceUrl.trim(),
+        sourceUrl: cleanedSourceUrl,
         mode: workspace.mode,
         rangeStart: workspace.rangeStart,
         rangeEnd: workspace.rangeEnd,
@@ -2337,89 +2392,42 @@ export default function Page() {
   const buildViralClipText = useCallback(
     (clip: ShortsClipOption) => {
       const hasChinese = /[㐀-鿿]/.test(`${clip.title} ${clip.description}`);
-      const rawTitle = clip.title.trim() || (hasChinese ? "這段內容值得看完" : "This clip is worth watching");
-      const rawDescription = clip.description.trim();
-      const normalizeSnippet = (value: string, limit: number) => {
+      const normalizeLine = (value: string, limit: number) => {
         const compact = value.replace(/\s+/g, " ").trim();
         if (!compact) return "";
         return compact.length > limit ? `${compact.slice(0, limit).trim()}…` : compact;
       };
-      const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
-      if (hasChinese) {
-        const titleCore = normalizeSnippet(rawTitle.replace(/[！!？?]+$/g, ""), 24) || "這段內容的核心重點";
-        const descCore = normalizeSnippet(rawDescription, 38);
-        const angles = [
-          `${titleCore}，這支短片直接把重點講清楚`,
-          `想快速弄懂${titleCore}，看這支短片就夠了`,
-          `${titleCore}最值得注意的地方，這裡說得很明白`,
-          `這支短片把${titleCore}的核心直接講出來了`,
-          `關於${titleCore}，這段內容是最容易看懂的一版`,
-          `${titleCore}到底在講什麼，這支短片直接進入主題`,
-        ];
-        const supports = descCore
-          ? [
-              `最有價值的是，它把「${descCore}」這件事說得很清楚。`,
-              `裡面直接抓住「${descCore}」這個關鍵，所以特別值得看。`,
-              `它沒有繞圈子，而是直接把「${descCore}」講到重點。`,
-            ]
-          : [
-              "整段節奏很順，開頭就直接進入重點。",
-              "內容不空泛，幾句話就把核心交代清楚了。",
-              "如果你想快速掌握主題，這支短片很適合先看。",
-            ];
-        const closers = [
-          "看完會更容易抓到整件事的關鍵。",
-          "這類內容最怕講不清楚，但這支短片做到了。",
-          "難得的是，它不誇張，卻很容易讓人想看下去。",
-          "如果你正在找重點版，這支短片會很適合。",
-        ];
-        const variants = [
-          `${pick(angles)}。${pick(supports)}`,
-          `${pick(angles)}，${pick(closers)}`,
-          `${pick(supports)}${pick(closers)}`,
-          `${pick(angles)}。${pick(closers)}`,
-        ];
-        return pick(variants);
+      const title = normalizeLine(
+        clip.title.trim() || (hasChinese ? "這段內容重點整理" : "Clip summary"),
+        hasChinese ? 30 : 90
+      )
+        .replace(/^這支短片[:：\-\s]*/i, "")
+        .replace(/^這段影片[:：\-\s]*/i, "")
+        .replace(/^this clip[:\-\s]*/i, "")
+        .replace(/^this video[:\-\s]*/i, "")
+        .trim();
+
+      const description = normalizeLine(
+        clip.description.trim(),
+        hasChinese ? 90 : 220
+      )
+        .replace(/^這支短片[:：\-\s]*/i, "")
+        .replace(/^這段影片[:：\-\s]*/i, "")
+        .replace(/^this clip[:\-\s]*/i, "")
+        .replace(/^this video[:\-\s]*/i, "")
+        .trim();
+
+      if (!description) {
+        return title || (hasChinese ? "這段內容重點整理" : "Clip summary");
       }
 
-      const titleCore = normalizeSnippet(rawTitle.replace(/[!?]+$/g, ""), 48) || "this topic";
-      const descCore = normalizeSnippet(rawDescription, 84);
-      const hooks = [
-        `${titleCore} is explained here in a way that is actually easy to follow`,
-        `This clip gets straight to the main point about ${titleCore}`,
-        `If you want the clearest short take on ${titleCore}, start with this clip`,
-        `What makes ${titleCore} interesting is exactly what this clip focuses on`,
-        `This breakdown of ${titleCore} feels direct, clear, and worth watching through`,
-      ];
-      const details = descCore
-        ? [
-            `The best part is how clearly it frames this point: ${descCore}`,
-            `It works because it gets right to the core: ${descCore}`,
-            `Instead of dragging it out, it explains the key point fast: ${descCore}`,
-          ]
-        : [
-            "It feels clear, direct, and easy to stay with.",
-            "It gets to the point quickly without sounding forced.",
-            "The pacing is clean, so the point lands fast.",
-          ];
-      const endings = [
-        "It is the kind of clip that makes people stop and keep watching.",
-        "If you want the quick version without losing the point, this is a strong one.",
-        "This one is easy to click into because the point is clear right away.",
-      ];
-      const variants = [
-        `${pick(hooks)}. ${pick(details)}`,
-        `${pick(hooks)}. ${pick(endings)}`,
-        `${pick(details)} ${pick(endings)}`,
-        `${pick(hooks)} — ${pick(endings)}`,
-      ];
-      return pick(variants);
+      return `${title || (hasChinese ? "這段內容重點整理" : "Clip summary")}\n${description}`;
     },
     []
   );
 
-  const generateViralClipText = useCallback(
+const generateViralClipText = useCallback(
     async (workspaceId: string, clipId: string) => {
       const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
       if (!workspace) return;
@@ -2837,7 +2845,8 @@ export default function Page() {
     try {
       setCreatingShortUrl(true);
 
-      const urlForShortLink = longUrlWithUtm || longUrl.trim();
+      const cleanedLongUrl = sanitizeGanJingWorldUrl(longUrl);
+      const urlForShortLink = longUrlWithUtm || cleanedLongUrl;
 
       const res = await fetch("/api/okurl-create", {
         method: "POST",
@@ -2889,14 +2898,17 @@ export default function Page() {
       }
 
       const normalizedShortUrl = normalizeShortUrlToDomain(generatedShortUrl, SHORT_LINK_DOMAIN);
+      const fetchedVideoTitle = extractOkurlLinkTitle(data);
       setShortUrl(normalizedShortUrl);
+      setVideoTitle(fetchedVideoTitle);
       setShortUrlCopied(false);
       setShortUrlSuccess("Generated");
 
       persistShortLinkHistoryEntry({
-        originalUrl: longUrl.trim(),
+        originalUrl: cleanedLongUrl,
         shortUrl: normalizedShortUrl,
         projectName: selectedProject?.name || "",
+        videoTitle: fetchedVideoTitle,
         createdAt: Date.now(),
       });
     } catch (err: any) {
@@ -2956,6 +2968,7 @@ export default function Page() {
     }
 
     const effectiveFolderName = folderName || pageName;
+    const cleanedLongUrl = sanitizeGanJingWorldUrl(longUrl);
 
     if (!pageName || !effectiveFolderName) {
       setError("Please choose a Facebook Page.");
@@ -2982,8 +2995,8 @@ export default function Page() {
       formData.append("page_name", pageName);
       formData.append("folder_name", effectiveFolderName);
       formData.append("facebook_page", pageName);
-      formData.append("title", "");
-      formData.append("target_url", longUrlWithUtm || longUrl);
+      formData.append("title", videoTitle.trim());
+      formData.append("target_url", longUrlWithUtm || cleanedLongUrl);
       formData.append("notes", combinedTxtNotes);
       formData.append("short_url", shortUrl);
       formData.append("okurl_slug", customSlug);
@@ -3025,6 +3038,7 @@ export default function Page() {
 
       setFiles([]);
       setLongUrl("");
+      setVideoTitle("");
       setShortUrl("");
       setCustomSlug("");
       setSignUpWallEnabled(false);
@@ -3286,6 +3300,40 @@ export default function Page() {
                         readOnly
                       />
                     </div>
+
+                  <div style={styles.shortLinkHistoryCard}>
+                    <div style={styles.actionTitle}>
+                      {tx("Recent short links", "最近生成的短鏈接")}
+                    </div>
+                    {shortLinkHistory.length ? (
+                      <div style={styles.shortLinkHistoryList}>
+                        {shortLinkHistory.map((item, index) => (
+                          <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryRow}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={styles.shortLinkHistoryProject}>
+                                {item.projectName || tx("Unknown project", "未命名項目")}
+                              </div>
+                              <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
+                              {item.videoTitle ? (
+                                <div style={styles.shortLinkHistoryVideoTitle}>
+                                  {tx("Video Title", "視頻標題")}：{item.videoTitle}
+                                </div>
+                              ) : null}
+                              {item.originalUrl ? (
+                                <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={styles.helperText}>
+                        {tx(
+                          "Your 5 most recent short links will appear here.",
+                          "這裡會顯示最近生成的 5 筆短鏈接。"
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
 
@@ -3313,6 +3361,16 @@ export default function Page() {
                           value={longUrl}
                           onChange={(e) => setLongUrl(e.target.value)}
                           placeholder={tx("Paste the Gan Jing World long-video URL here", "請貼上來自乾淨世界的長視頻鏈接")}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={styles.label}>{tx("Video Title", "視頻標題")}</label>
+                        <input
+                          style={styles.inputReadonly}
+                          value={videoTitle}
+                          readOnly
+                          placeholder={tx("Will be fetched from OKURL after generation", "生成短鏈接後會自動從 OKURL 抓取")}
                         />
                       </div>
 
@@ -3406,35 +3464,6 @@ export default function Page() {
                         <div style={styles.errorBox}>{shortUrlError}</div>
                       ) : null}
 
-                      <div style={styles.shortLinkHistoryCard}>
-                        <div style={styles.actionTitle}>
-                          {tx("Recent short links", "最近生成的短鏈接")}
-                        </div>
-                        {shortLinkHistory.length ? (
-                          <div style={styles.shortLinkHistoryList}>
-                            {shortLinkHistory.map((item, index) => (
-                              <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryRow}>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={styles.shortLinkHistoryProject}>
-                                    {item.projectName || tx("Unknown project", "未命名項目")}
-                                  </div>
-                                  <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
-                                  <div style={styles.shortLinkHistoryOrigin}>
-                                    {tx("From long-video URL:", "對應長視頻鏈接：")} {item.originalUrl}
-                                  </div>
-                                </div>
-</div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={styles.helperText}>
-                            {tx(
-                              "Your 5 most recent short links will appear here.",
-                              "這裡會顯示最近生成的 5 筆短鏈接。"
-                            )}
-                          </div>
-                        )}
-                      </div>
                     </div>
 
                     <div style={styles.utmBuilderCard}>
@@ -4199,6 +4228,7 @@ export default function Page() {
                       const txtSnippet = txtPreviewSnippets[previewKey];
                       const isVideoFile = Boolean(videoPreviewUrl);
                       const isTxtFile = file.type.startsWith("text/") || /\.txt$/i.test(file.name);
+                      const isEditing = editingFileIndex === idx;
 
                       return (
                         <div key={file.name + "-" + String(idx)} style={styles.fileRow}>
@@ -4219,50 +4249,69 @@ export default function Page() {
                               )}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={styles.fileName}>{file.name}</div>
-                              <div style={styles.fileMeta}>
-                                {(file.size / 1024 / 1024).toFixed(2)} MB
-                              </div>
-                              {isVideoFile && file.originalTitle ? (
-                                <div style={styles.filePreviewSnippetBelow}>{file.originalTitle}</div>
-                              ) : null}
-                              {isTxtFile && txtSnippet ? (
-                                <div style={styles.filePreviewSnippetBelow}>{txtSnippet}</div>
-                              ) : null}
-                              {isTxtFile && editingTxtIndex === idx ? (
-                                <div style={{ display: "grid", gap: 8, marginTop: 10, maxWidth: 760 }}>
-                                  <textarea
-                                    rows={5}
-                                    style={{ ...styles.compactTextarea, minHeight: 112, width: "100%", maxWidth: 760 }}
-                                    value={editingTxtDraft}
-                                    onChange={(e) => setEditingTxtDraft(e.target.value)}
-                                  />
+                              {!isEditing ? (
+                                <>
+                                  <div style={styles.fileName}>{file.name}</div>
+                                  <div style={styles.fileMeta}>
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  </div>
+                                  {isVideoFile && file.originalTitle ? (
+                                    <div style={styles.filePreviewSnippetBelow}>{file.originalTitle}</div>
+                                  ) : null}
+                                  {isTxtFile && txtSnippet ? (
+                                    <div style={styles.filePreviewSnippetBelow}>{txtSnippet}</div>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <div style={{ display: "grid", gap: 8, marginTop: 2, maxWidth: 760 }}>
+                                  <div>
+                                    <label style={styles.label}>{tx("File name", "文件名")}</label>
+                                    <input
+                                      style={styles.compactInput}
+                                      value={editingFileNameDraft}
+                                      onChange={(e) => setEditingFileNameDraft(e.target.value)}
+                                    />
+                                  </div>
+                                  <div style={styles.fileMeta}>
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  </div>
+                                  {isTxtFile ? (
+                                    <div>
+                                      <label style={styles.label}>{tx("TXT content", "TXT 內容")}</label>
+                                      <textarea
+                                        rows={5}
+                                        style={{ ...styles.compactTextarea, minHeight: 112, width: "100%", maxWidth: 760 }}
+                                        value={editingTxtDraft}
+                                        onChange={(e) => setEditingTxtDraft(e.target.value)}
+                                      />
+                                    </div>
+                                  ) : null}
                                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                     <button
                                       type="button"
                                       style={secondaryButtonStyle}
-                                      onClick={cancelEditedTxtFile}
+                                      onClick={cancelEditingFile}
                                     >
                                       {tx("Cancel", "取消")}
                                     </button>
                                     <button
                                       type="button"
                                       style={secondaryButtonStyle}
-                                      onClick={saveEditedTxtFile}
+                                      onClick={saveEditedFile}
                                     >
                                       {tx("Save", "保存")}
                                     </button>
                                   </div>
                                 </div>
-                              ) : null}
+                              )}
                             </div>
                           </div>
                           <div style={styles.fileRowActions}>
-                            {isTxtFile && editingTxtIndex !== idx ? (
+                            {!isEditing ? (
                               <button
                                 type="button"
                                 style={secondaryButtonStyle}
-                                onClick={() => void editTxtFile(idx)}
+                                onClick={() => void startEditingFile(idx)}
                               >
                                 {tx("Edit", "編輯")}
                               </button>
@@ -4348,7 +4397,24 @@ export default function Page() {
                     </button>
                   </div>
 
-                  {success ? <div style={activatedSuccessfully ? styles.successCelebrationBox : styles.successBox}>{success}</div> : null}
+                  {success ? (
+                    <div
+                      style={
+                        activatedSuccessfully
+                          ? {
+                              marginTop: 20,
+                              textAlign: "center",
+                              color: "#15803d",
+                              fontWeight: 800,
+                              fontSize: 22,
+                              lineHeight: 1.4,
+                            }
+                          : styles.successBox
+                      }
+                    >
+                      {success}
+                    </div>
+                  ) : null}
                   {error ? <div style={styles.errorBox}>{error}</div> : null}
                 </section>
               </div>
@@ -5042,6 +5108,13 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     flex: 1,
   },
+  fileRowActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    alignSelf: "flex-start",
+  },
   filePreviewBox: {
     width: 42,
     height: 56,
@@ -5366,21 +5439,22 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#ffffff",
     padding: 14,
     display: "grid",
-    gap: 8,
+    gap: 10,
   },
   shortLinkHistoryList: {
     display: "grid",
-    gap: 8,
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 10,
   },
   shortLinkHistoryRow: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 12,
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "1px solid #e6eef9",
     borderRadius: 12,
     background: "#f8fbff",
+    minWidth: 0,
   },
   shortLinkHistoryProject: {
     fontSize: 12,
@@ -5401,5 +5475,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#607086",
     lineHeight: 1.5,
     wordBreak: "break-all",
+  },
+  shortLinkHistoryVideoTitle: {
+    fontSize: 12,
+    color: "#43556d",
+    lineHeight: 1.5,
+    wordBreak: "break-word",
   },
 };
