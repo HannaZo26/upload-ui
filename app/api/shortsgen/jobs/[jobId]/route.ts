@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   errorResponse,
+  extractShortsgenError,
   normalizeShortsgenProgress,
   normalizeShortsgenStatus,
   pickFirstString,
@@ -43,6 +44,7 @@ export async function GET(
       id: jobId,
       status: normalizeShortsgenStatus(result.data) || "UNKNOWN",
       progress: normalizeShortsgenProgress(result.data),
+      error: extractShortsgenError(result.data),
       upstream: result.data,
     });
   } catch (error) {
