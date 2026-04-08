@@ -55,6 +55,32 @@ type UploadableFile = File & {
   originalTitle?: string;
 };
 
+type CloudflareUploadRequestFile = {
+  clientId: string;
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+};
+
+type CloudflareUploadPlanFile = {
+  clientId: string;
+  fileName: string;
+  key: string;
+  uploadUrl: string;
+  publicUrl: string;
+  contentType: string;
+  size: number;
+  lastModified: number;
+};
+
+type CloudflareUploadSession = {
+  sessionId: string;
+  objectPrefix: string;
+  manifestKey: string;
+  files: CloudflareUploadPlanFile[];
+};
+
 type ShortsGenerationMode = "aiClipping" | "manualSelected";
 
 type SavedShortsHistoryEntry = {
@@ -111,6 +137,8 @@ type ShortsWorkspaceState = {
 };
 
 const SHORT_LINK_DOMAIN = "gjw.us";
+const N8N_CLOUDFLARE_WEBHOOK_URL =
+  "https://n8n.influencerconnectagency.biz/webhook/cloudflare-upload-entry";
 const TXT_BOX_COUNT = 5;
 const SHORTSGEN_MAX_POLL_ATTEMPTS = 120;
 const SHORTSGEN_FULL_VIDEO_MAX_POLL_ATTEMPTS = 360;
@@ -709,6 +737,83 @@ const buildSequentialFileName = (index: number, extension: "mp4" | "txt") => {
   return `video${index + 1}.${extension}`;
 };
 
+const FB_COMMENT_MARKER = "[FB_COMMENT]";
+
+const appendFacebookCommentToTxt = (content: string, facebookComment: string) => {
+  const trimmedContent = content.trim();
+  const trimmedComment = facebookComment.trim();
+
+  if (!trimmedComment) {
+    return trimmedContent;
+  }
+
+  return `${trimmedContent}\n\n${FB_COMMENT_MARKER}\n${trimmedComment}`;
+};
+
+const buildCloudflareUploadRequestFiles = (
+  files: UploadableFile[]
+): CloudflareUploadRequestFile[] =>
+  files.map((file, index) => ({
+    clientId: `${index + 1}-${file.name}-${file.size}-${file.lastModified}`,
+    name: file.name,
+    size: file.size,
+    type: file.type || "application/octet-stream",
+    lastModified: file.lastModified,
+  }));
+
+const uploadFilesToCloudflare = async (input: {
+  localFiles: UploadableFile[];
+  uploadSession: CloudflareUploadSession;
+  onProgress?: (message: string) => void;
+}) => {
+  const localFileMap = new Map(
+    buildCloudflareUploadRequestFiles(input.localFiles).map((descriptor, index) => [
+      descriptor.clientId,
+      input.localFiles[index],
+    ])
+  );
+
+  const uploadedFiles: CloudflareUploadPlanFile[] = [];
+
+  for (const [index, plannedFile] of input.uploadSession.files.entries()) {
+    const localFile = localFileMap.get(plannedFile.clientId);
+
+    if (!localFile) {
+      throw new Error(`Missing local file for ${plannedFile.fileName}.`);
+    }
+
+    input.onProgress?.(
+      `Uploading to Cloudflare R2 (${index + 1}/${input.uploadSession.files.length}): ${plannedFile.fileName}`
+    );
+
+    const uploadResponse = await fetch(plannedFile.uploadUrl, {
+      method: "PUT",
+      headers: plannedFile.contentType
+        ? {
+            "Content-Type": plannedFile.contentType,
+          }
+        : undefined,
+      body: localFile,
+    });
+
+    if (!uploadResponse.ok) {
+      const uploadError = await uploadResponse.text();
+      throw new Error(
+        uploadError ||
+          `Cloudflare upload failed for ${plannedFile.fileName} (${uploadResponse.status}).`
+      );
+    }
+
+    uploadedFiles.push({
+      ...plannedFile,
+      size: localFile.size,
+      lastModified: localFile.lastModified,
+    });
+  }
+
+  return uploadedFiles;
+};
+
 const getSequentialIndexFromName = (
   fileName: string,
   extension: "mp4" | "txt"
@@ -861,8 +966,7 @@ export default function Page() {
 
   const [viewportWidth, setViewportWidth] = useState<number>(1200);
 
-  const n8nWebhookUrl =
-    "https://n8n.influencerconnectagency.biz/webhook/upload-entry";
+  const n8nWebhookUrl = N8N_CLOUDFLARE_WEBHOOK_URL;
 
   const [folderName, setFolderName] = useState("");
   const [pageName, setPageName] = useState("");
@@ -878,6 +982,7 @@ export default function Page() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [activatedSuccessfully, setActivatedSuccessfully] = useState(false);
+  const [facebookComment, setFacebookComment] = useState("");
 
   const [longUrl, setLongUrl] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -1551,6 +1656,7 @@ export default function Page() {
     setFiles([]);
     setLongUrl("");
     setVideoTitle("");
+    setFacebookComment("");
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
@@ -2995,7 +3101,7 @@ const generateViralClipText = useCallback(
 
       const generatedTxtFiles = populatedEntries.map(
         (entry) =>
-          new File(["﻿" + entry.content], entry.fileName, {
+          new File(["﻿" + appendFacebookCommentToTxt(entry.content, facebookComment)], entry.fileName, {
             type: "text/plain;charset=utf-8",
             lastModified: Date.now(),
           })
@@ -3045,7 +3151,7 @@ const generateViralClipText = useCallback(
     }
 
     populatedEntries.forEach((entry) => {
-      const blob = new Blob(["﻿" + entry.content], {
+      const blob = new Blob(["﻿" + appendFacebookCommentToTxt(entry.content, facebookComment)], {
         type: "text/plain;charset=utf-8",
       });
       const url = URL.createObjectURL(blob);
@@ -3226,54 +3332,92 @@ const generateViralClipText = useCallback(
       setActivatedSuccessfully(false);
       setSuccess(
         tx(
-          "Activating automation... Please keep this page open until Activated successfully appears.",
-          "正在開啟自動化……請保持此頁面開啟，直到出現自動化已開啟成功。"
+          "Preparing Cloudflare R2 upload... Please keep this page open until Activated successfully appears.",
+          "正在準備 Cloudflare R2 上傳……請保持此頁面開啟，直到出現自動化已開啟成功。"
+        )
+      );
+      const requestFiles = buildCloudflareUploadRequestFiles(files);
+      const uploadPlanRes = await fetch("/api/cloudflare/r2-upload-plan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: currentUser.username,
+          pageName,
+          files: requestFiles,
+        }),
+      });
+
+      const uploadPlanData = await readResponseData(uploadPlanRes);
+
+      if (!uploadPlanRes.ok) {
+        throw new Error(
+          uploadPlanData?.error ||
+            uploadPlanData?.message ||
+            `Failed to prepare Cloudflare upload (${uploadPlanRes.status})`
+        );
+      }
+
+      const uploadSession = uploadPlanData?.uploadSession as CloudflareUploadSession | undefined;
+
+      if (!uploadSession?.files?.length) {
+        throw new Error("Cloudflare upload plan did not return any files.");
+      }
+
+      const uploadedFiles = await uploadFilesToCloudflare({
+        localFiles: files,
+        uploadSession,
+        onProgress: (message) => {
+          setSuccess(
+            tx(
+              message,
+              "正在上傳到 Cloudflare R2，請稍候……"
+            )
+          );
+        },
+      });
+
+      setSuccess(
+        tx(
+          "Submitting Cloudflare manifest to automation...",
+          "正在把 Cloudflare manifest 送進自動化流程……"
         )
       );
 
-      const formData = new FormData();
-      formData.append("username", currentUser.username);
-      formData.append("page_name", pageName);
-      formData.append("folder_name", effectiveFolderName);
-      formData.append("facebook_page", pageName);
-      formData.append("title", videoTitle.trim());
-      formData.append("target_url", longUrlWithUtm || cleanedLongUrl);
-      formData.append("notes", combinedTxtNotes);
-      formData.append("short_url", shortUrl);
-      formData.append("okurl_slug", customSlug);
-      formData.append("okurl_domain", SHORT_LINK_DOMAIN);
-      formData.append("domain_id", selectedDomain?.id || "");
-      formData.append("utm_template", utmTemplate);
-      formData.append("utm_source", utmFields.source);
-      formData.append("utm_medium", utmFields.medium);
-      formData.append("utm_campaign", utmFields.campaign);
-      formData.append("utm_term", utmFields.term);
-      formData.append("utm_content", utmFields.content);
-      formData.append("utm_source_platform", utmFields.sourcePlatform);
-
-      files.forEach((file, idx) => {
-        formData.append("file_" + String(idx + 1), file, file.name);
-      });
-
-      const res = await fetch(n8nWebhookUrl, {
+      const submitRes = await fetch("/api/cloudflare/r2-submit", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          n8nWebhookUrl,
+          uploadSession,
+          uploadedFiles,
+          username: currentUser.username,
+          pageName,
+          folderName: effectiveFolderName,
+          facebookPage: pageName,
+          title: videoTitle.trim(),
+          targetUrl: longUrlWithUtm || cleanedLongUrl,
+          notes: combinedTxtNotes,
+          facebookComment,
+          shortUrl,
+          okurlSlug: customSlug,
+          okurlDomain: SHORT_LINK_DOMAIN,
+          domainId: selectedDomain?.id || "",
+          utmTemplate,
+          utmFields,
+        }),
       });
 
-      const text = await res.text();
-      let data: any = null;
+      const submitData = await readResponseData(submitRes);
 
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = { raw: text };
-      }
-
-      if (!res.ok) {
+      if (!submitRes.ok) {
         throw new Error(
-          data?.error ||
-            data?.message ||
-            "Upload failed (" + String(res.status) + ")"
+          submitData?.error ||
+            submitData?.message ||
+            `Cloudflare manifest submit failed (${submitRes.status})`
         );
       }
 
@@ -3290,8 +3434,9 @@ const generateViralClipText = useCallback(
       setActivatedSuccessfully(true);
       setSuccess(
         tx(
-          "Activated successfully",
-          "自動化已開啟成功"
+          submitData?.forwarded?.body?.message ||
+            "Activated successfully via Cloudflare R2",
+          submitData?.forwarded?.body?.message || "已透過 Cloudflare R2 成功開啟自動化"
         )
       );
       setError("");
@@ -4483,7 +4628,10 @@ const generateViralClipText = useCallback(
                   </div>
 
                   <div style={styles.panelDesc}>
-                    After downloading the TXT file, upload the video and the matching TXT file together.
+                    {tx(
+                      "Upload the video and matching TXT files here. Large files will go directly to Cloudflare R2 instead of being pushed through the webhook request.",
+                      "請在這裡上傳影片和對應的 TXT 文件。大檔會直接上傳到 Cloudflare R2，不再整包塞進 webhook 請求。"
+                    )}
                   </div>
 
                   <div
@@ -4632,9 +4780,31 @@ const generateViralClipText = useCallback(
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then activate the automation. Please keep this page open until you see Activated successfully.",
-                      "檢查目前摘要後再開啟自動化。請不要關閉此頁面，直到看到 自動化已開啟成功 才算完成。"
+                      "Review the current summary, then activate the automation. The files will upload to Cloudflare R2 first, and only the manifest will be sent to n8n. Please keep this page open until you see Activated successfully.",
+                      "檢查目前摘要後再開啟自動化。檔案會先上傳到 Cloudflare R2，再只把 manifest 送進 n8n。請不要關閉此頁面，直到看到 自動化已開啟成功 才算完成。"
                     )}
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
+                    <label style={styles.label}>
+                      {tx("Facebook comment from this Page", "由這個 Facebook Page 發出的留言")}
+                    </label>
+                    <textarea
+                      rows={4}
+                      style={{ ...styles.compactTextarea, width: "100%" }}
+                      value={facebookComment}
+                      onChange={(e) => setFacebookComment(e.target.value)}
+                      placeholder={tx(
+                        "Optional. If filled in, the same Facebook Page will post this comment after the Reel is published.",
+                        "選填。若有填寫，Reel 發佈後會由同一個 Facebook Page 自動發出這則留言。"
+                      )}
+                    />
+                    <div style={styles.fileMeta}>
+                      {tx(
+                        "The comment is stored in each generated TXT file with a hidden marker, so the current workflow can read it without changing your Google Drive folder structure.",
+                        "這段留言會被寫進每個生成的 TXT 隱藏區塊，讓目前 workflow 不用改 Google Drive 資料夾結構也能讀到。"
+                      )}
+                    </div>
                   </div>
 
                   <div style={styles.summaryCard}>
@@ -4663,6 +4833,10 @@ const generateViralClipText = useCallback(
                       <span>Total size</span>
                       <strong>{totalSizeMb} MB</strong>
                     </div>
+                    <div style={styles.summaryRow}>
+                      <span>FB comment</span>
+                      <strong style={styles.summaryBreak}>{facebookComment.trim() || "-"}</strong>
+                    </div>
                   </div>
 
                   <div style={styles.inlineActions}>
@@ -4684,7 +4858,7 @@ const generateViralClipText = useCallback(
                       {currentUser?.isDemo
                         ? "Demo account cannot activate automation"
                         : submitting
-                        ? "Activating..."
+                        ? tx("Uploading to Cloudflare...", "正在上傳到 Cloudflare……")
                         : tx("Activate automation", "開啟自動化")}
                     </button>
                   </div>
