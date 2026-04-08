@@ -129,6 +129,7 @@ type ShortsWorkspaceState = {
   errorMessage: string;
   copiedClipActionKey: string;
   txtDescriptions: string[];
+  facebookComment: string;
   addingTxtsToUploads: boolean;
   txtsAddedToUploads: boolean;
   jobId: string;
@@ -943,6 +944,7 @@ const createInitialShortsWorkspaceState = (
   errorMessage: "",
   copiedClipActionKey: "",
   txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
+  facebookComment: "",
   addingTxtsToUploads: false,
   txtsAddedToUploads: false,
   jobId: "",
@@ -983,7 +985,6 @@ export default function Page() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [activatedSuccessfully, setActivatedSuccessfully] = useState(false);
-  const [facebookComment, setFacebookComment] = useState("");
 
   const [longUrl, setLongUrl] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -1657,7 +1658,6 @@ export default function Page() {
     setFiles([]);
     setLongUrl("");
     setVideoTitle("");
-    setFacebookComment("");
     setShortUrl("");
     setCustomSlug("");
     setSignUpWallEnabled(false);
@@ -3102,7 +3102,7 @@ const generateViralClipText = useCallback(
 
       const generatedTxtFiles = populatedEntries.map(
         (entry) =>
-          new File(["﻿" + appendFacebookCommentToTxt(entry.content, facebookComment)], entry.fileName, {
+          new File(["﻿" + appendFacebookCommentToTxt(entry.content, workspace.facebookComment)], entry.fileName, {
             type: "text/plain;charset=utf-8",
             lastModified: Date.now(),
           })
@@ -3152,7 +3152,7 @@ const generateViralClipText = useCallback(
     }
 
     populatedEntries.forEach((entry) => {
-      const blob = new Blob(["﻿" + appendFacebookCommentToTxt(entry.content, facebookComment)], {
+      const blob = new Blob(["﻿" + appendFacebookCommentToTxt(entry.content, workspace.facebookComment)], {
         type: "text/plain;charset=utf-8",
       });
       const url = URL.createObjectURL(blob);
@@ -3402,7 +3402,8 @@ const generateViralClipText = useCallback(
           title: videoTitle.trim(),
           targetUrl: longUrlWithUtm || cleanedLongUrl,
           notes: combinedTxtNotes,
-          facebookComment,
+          facebookComment:
+            shortsWorkspaces.map((workspace) => workspace.facebookComment.trim()).find(Boolean) || "",
           shortUrl,
           okurlSlug: customSlug,
           okurlDomain: SHORT_LINK_DOMAIN,
@@ -4383,14 +4384,33 @@ const generateViralClipText = useCallback(
                                       ))}
                                     </div>
 
+                                    <div style={{ display: "grid", gap: 8 }}>
+                                      <label style={styles.label}>
+                                        {tx("Facebook comment from this Page", "由這個 Facebook Page 發出的留言")}
+                                      </label>
+                                      <textarea
+                                        rows={4}
+                                        style={{ ...styles.compactTextarea, width: "100%" }}
+                                        value={workspace.facebookComment}
+                                        onChange={(e) =>
+                                          updateShortsWorkspace(workspace.workspaceId, {
+                                            facebookComment: e.target.value,
+                                          })
+                                        }
+                                        placeholder={tx(
+                                          "Optional. This workspace will reuse the same Facebook comment for every TXT you add below.",
+                                          "選填。這個 workspace 下面加入的每個 TXT，都會共用這一則 Facebook 留言。"
+                                        )}
+                                      />
+                                      <div style={styles.fileMeta}>
+                                        {tx(
+                                          "Fill this before clicking Add TXT to Upload files. The comment is stored in each generated TXT file with a hidden marker.",
+                                          "請先在按 Add TXT to Upload files 之前填寫。這段留言會以隱藏標記寫進每個生成的 TXT。"
+                                        )}
+                                      </div>
+                                    </div>
+
                                     <div style={styles.inlineActions}>
-                                      <button
-                                        type="button"
-                                        style={secondaryButtonStyle}
-                                        onClick={() => downloadTxt(workspace.workspaceId)}
-                                      >
-                                        {tx("Download all TXT files", "下載全部 TXT 文件")}
-                                      </button>
                                       <button
                                         type="button"
                                         style={{
@@ -4404,6 +4424,13 @@ const generateViralClipText = useCallback(
                                         {workspace.addingTxtsToUploads
                                           ? tx("Adding TXT...", "正在加入 TXT...")
                                           : tx("Add TXT to Upload files", "加入 TXT 到上傳文件")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        style={secondaryButtonStyle}
+                                        onClick={() => downloadTxt(workspace.workspaceId)}
+                                      >
+                                        {tx("Download all TXT files", "下載全部 TXT 文件")}
                                       </button>
                                       {workspace.txtsAddedToUploads ? (
                                         <span style={styles.copiedText}>{tx("Added ✓", "已加入 ✓")}</span>
@@ -4786,28 +4813,6 @@ const generateViralClipText = useCallback(
                     )}
                   </div>
 
-                  <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
-                    <label style={styles.label}>
-                      {tx("Facebook comment from this Page", "由這個 Facebook Page 發出的留言")}
-                    </label>
-                    <textarea
-                      rows={4}
-                      style={{ ...styles.compactTextarea, width: "100%" }}
-                      value={facebookComment}
-                      onChange={(e) => setFacebookComment(e.target.value)}
-                      placeholder={tx(
-                        "Optional. If filled in, the same Facebook Page will post this comment after the Reel is published.",
-                        "選填。若有填寫，Reel 發佈後會由同一個 Facebook Page 自動發出這則留言。"
-                      )}
-                    />
-                    <div style={styles.fileMeta}>
-                      {tx(
-                        "The comment is stored in each generated TXT file with a hidden marker, so the current workflow can read it without changing your Google Drive folder structure.",
-                        "這段留言會被寫進每個生成的 TXT 隱藏區塊，讓目前 workflow 不用改 Google Drive 資料夾結構也能讀到。"
-                      )}
-                    </div>
-                  </div>
-
                   <div style={styles.summaryCard}>
                     <div style={styles.actionTitle}>Current summary</div>
                     <div style={styles.summaryRow}>
@@ -4833,10 +4838,6 @@ const generateViralClipText = useCallback(
                     <div style={styles.summaryRow}>
                       <span>Total size</span>
                       <strong>{totalSizeMb} MB</strong>
-                    </div>
-                    <div style={styles.summaryRow}>
-                      <span>FB comment</span>
-                      <strong style={styles.summaryBreak}>{facebookComment.trim() || "-"}</strong>
                     </div>
                   </div>
 
