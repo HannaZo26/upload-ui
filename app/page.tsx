@@ -3300,41 +3300,6 @@ const generateViralClipText = useCallback(
                         readOnly
                       />
                     </div>
-
-                  <div style={styles.shortLinkHistoryCard}>
-                    <div style={styles.actionTitle}>
-                      {tx("Recent short links", "最近生成的短鏈接")}
-                    </div>
-                    {shortLinkHistory.length ? (
-                      <div style={styles.shortLinkHistoryList}>
-                        {shortLinkHistory.map((item, index) => (
-                          <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryRow}>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={styles.shortLinkHistoryProject}>
-                                {item.projectName || tx("Unknown project", "未命名項目")}
-                              </div>
-                              <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
-                              {item.videoTitle ? (
-                                <div style={styles.shortLinkHistoryVideoTitle}>
-                                  {tx("Video Title", "視頻標題")}：{item.videoTitle}
-                                </div>
-                              ) : null}
-                              {item.originalUrl ? (
-                                <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={styles.helperText}>
-                        {tx(
-                          "Your 5 most recent short links will appear here.",
-                          "這裡會顯示最近生成的 5 筆短鏈接。"
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </section>
 
                 <section style={panelStyle}>
@@ -3587,6 +3552,36 @@ const generateViralClipText = useCallback(
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  <div style={{ ...styles.shortLinkHistoryCard, marginTop: 20 }}>
+                    <div style={styles.actionTitle}>
+                      {tx("Recent short links", "最近生成的短鏈接")}
+                    </div>
+                    {shortLinkHistory.length ? (
+                      <div style={styles.shortLinkHistoryListWide}>
+                        {shortLinkHistory.map((item, index) => (
+                          <div key={`${item.shortUrl}-${index}`} style={styles.shortLinkHistoryWideRow}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={styles.shortLinkHistoryProject}>
+                                {item.projectName || tx("Unknown project", "未命名項目")}
+                              </div>
+                              <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
+                              {item.originalUrl ? (
+                                <div style={styles.shortLinkHistoryOrigin}>{item.originalUrl}</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={styles.helperText}>
+                        {tx(
+                          "Your 5 most recent short links will appear here.",
+                          "這裡會顯示最近生成的 5 筆短鏈接。"
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
 
