@@ -679,6 +679,22 @@ const isTerminalShortsStatus = (status: string) => {
   return normalized === "COMPLETED" || normalized === "FAILED" || normalized === "READY_TO_REFRESH";
 };
 
+const isPendingShortsStatus = (status: string) => {
+  const normalized = normalizeClientShortsStatus(status);
+  return normalized === "SCHEDULED" || normalized === "IN_PROGRESS";
+};
+
+const formatShortsUserError = (message: string) => {
+  const normalized = (message || "").trim();
+  if (!normalized) return "";
+
+  if (/no audio track found|missing audio/i.test(normalized)) {
+    return "ShortsGen upstream failed: no audio track was detected in this video, so shorts cannot be generated from this source right now.";
+  }
+
+  return normalized;
+};
+
 const readResponseData = async (response: Response) => {
   const text = await response.text();
 
@@ -1917,6 +1933,16 @@ export default function Page() {
     [applyCompletedShortsJob, fetchShortsResultsForJob]
   );
 
+  const findShortsHistoryEntry = useCallback(
+    (workspaceId: string, jobId: string) =>
+      shortsHistory.find(
+        (entry) =>
+          (entry.workspaceId || SHORTS_WORKSPACE_CONFIG[0].workspaceId) === workspaceId &&
+          entry.jobId === jobId
+      ) || null,
+    [shortsHistory]
+  );
+
   const monitorShortsJob = useCallback(
     async ({
       workspaceId,
@@ -2052,11 +2078,15 @@ export default function Page() {
           }
 
           if (finalStatus === "FAILED") {
-            const failedMessage =
+            const failedMessage = formatShortsUserError(
               statusData?.error ||
-              statusData?.message ||
-              statusData?.upstream?.message ||
-              "";
+                statusData?.message ||
+                statusData?.upstream?.error ||
+                statusData?.upstream?.message ||
+                statusData?.upstream?.progress?.error ||
+                statusData?.upstream?.context?.download?.internal_error ||
+                ""
+            );
             const softFailed = isSoftFailedShortsStatus(finalStatus, failedMessage);
 
             for (let confirmAttempt = 0; confirmAttempt < SHORTSGEN_FAILED_CONFIRMATION_CHECKS; confirmAttempt += 1) {
@@ -2188,7 +2218,9 @@ export default function Page() {
           clips,
         });
       } catch (err: any) {
-        const message = err?.message || "Failed to prepare the shorts preview.";
+        const message = formatShortsUserError(
+          err?.message || "Failed to prepare the shorts preview."
+        );
         const keepRefreshState = isRecoverableShortsRefreshState(message, finalStatus);
 
         updateShortsWorkspace(workspaceId, (workspace) => ({
@@ -2252,6 +2284,41 @@ export default function Page() {
       tryResolveCompletedShortsJob,
       updateShortsWorkspace,
     ]
+  );
+
+  const resumeShortsMonitoring = useCallback(
+    async (workspaceId: string) => {
+      const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
+      if (!workspace?.jobId) return;
+
+      const historyEntry = findShortsHistoryEntry(workspaceId, workspace.jobId);
+
+      try {
+        updateShortsWorkspace(workspaceId, {
+          generatingShorts: true,
+          errorMessage: "",
+          successMessage: "",
+        });
+
+        await monitorShortsJob({
+          workspaceId,
+          jobId: workspace.jobId,
+          sourceUrl: workspace.sourceUrl.trim(),
+          mode: workspace.mode,
+          rangeStart: workspace.rangeStart,
+          rangeEnd: workspace.rangeEnd,
+          createdAt: historyEntry?.createdAt || Date.now(),
+        });
+      } catch (err: any) {
+        updateShortsWorkspace(workspaceId, {
+          generatingShorts: false,
+          errorMessage: formatShortsUserError(
+            err?.message || "Failed to resume ShortsGen monitoring."
+          ),
+        });
+      }
+    },
+    [findShortsHistoryEntry, monitorShortsJob, shortsWorkspaces, updateShortsWorkspace]
   );
 
   useEffect(() => {
@@ -2511,7 +2578,9 @@ export default function Page() {
       });
     } catch (err: any) {
       updateShortsWorkspace(workspaceId, {
-        errorMessage: err?.message || "Failed to prepare the shorts preview.",
+        errorMessage: formatShortsUserError(
+          err?.message || "Failed to prepare the shorts preview."
+        ),
         generatingShorts: false,
       });
     }
@@ -3812,6 +3881,18 @@ const generateViralClipText = useCallback(
                         workspace.rangeStart,
                         workspace.rangeEnd
                       );
+                      const workspaceHasPendingJob = isPendingShortsStatus(
+                        workspace.jobStatus
+                      );
+                      const workspaceIsActivelyChecking =
+                        workspace.generatingShorts ||
+                        activeShortsMonitorRef.current[workspace.workspaceId] ===
+                          workspace.jobId;
+                      const workspaceActionLabel = workspaceIsActivelyChecking
+                        ? tx("Checking...", "檢查中...")
+                        : workspaceHasPendingJob
+                        ? tx("Resume checking", "恢復檢查")
+                        : tx("Generate shorts", "生成 shorts");
 
                       return (
                         <div
@@ -4106,13 +4187,22 @@ const generateViralClipText = useCallback(
                                       type="button"
                                       style={{
                                         ...styles.primaryButton,
-                                        opacity: workspace.generatingShorts ? 0.7 : 1,
-                                        cursor: workspace.generatingShorts ? "not-allowed" : "pointer",
+                                        opacity: workspaceIsActivelyChecking ? 0.7 : 1,
+                                        cursor: workspaceIsActivelyChecking
+                                          ? "not-allowed"
+                                          : "pointer",
                                       }}
-                                      onClick={() => generateShorts(workspace.workspaceId)}
-                                      disabled={workspace.generatingShorts}
+                                      onClick={() => {
+                                        if (workspaceHasPendingJob && workspace.jobId) {
+                                          void resumeShortsMonitoring(workspace.workspaceId);
+                                          return;
+                                        }
+
+                                        void generateShorts(workspace.workspaceId);
+                                      }}
+                                      disabled={workspaceIsActivelyChecking}
                                     >
-                                      {workspace.generatingShorts ? "Generating..." : "Generate shorts"}
+                                      {workspaceActionLabel}
                                     </button>
                                   </div>
 
@@ -4325,8 +4415,10 @@ const generateViralClipText = useCallback(
                                     </div>
                                   ) : (
                                     <div style={styles.shortsEmptyState}>
-                                      {workspace.generatingShorts
+                                      {workspaceIsActivelyChecking
                                         ? "ShortsGen is analyzing the long video and preparing clips..."
+                                        : workspaceHasPendingJob
+                                        ? "Monitoring paused for this job. Click Resume checking to continue polling the existing ShortsGen job."
                                         : "Generate shorts in this workspace to preview clip options, compare quality, and choose the best ones to download."}
                                     </div>
                                   )}
