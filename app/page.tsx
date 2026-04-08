@@ -573,6 +573,46 @@ const isRetryableShortsMessage = (value: string) => {
   );
 };
 
+const normalizeClientShortsStatus = (value: string) => {
+  const normalized = value
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_")
+    .toUpperCase();
+
+  if (!normalized) return "";
+
+  if (
+    ["SUCCESS", "SUCCEEDED", "SUCCEED", "COMPLETED", "COMPLETE", "DONE", "FINISHED", "READY"].includes(
+      normalized
+    )
+  ) {
+    return "COMPLETED";
+  }
+
+  if (
+    ["IN_PROGRESS", "INPROGRESS", "PROCESSING", "RUNNING", "STARTED", "STARTING", "GENERATING"].includes(
+      normalized
+    )
+  ) {
+    return "IN_PROGRESS";
+  }
+
+  if (["QUEUED", "QUEUE", "PENDING", "WAITING", "SCHEDULED", "CREATED", "SUBMITTED"].includes(normalized)) {
+    return "SCHEDULED";
+  }
+
+  if (
+    ["FAILED", "FAIL", "FAILURE", "ERROR", "CANCELLED", "CANCELED", "ABORTED", "REJECTED", "TIMEOUT", "TIMED_OUT"].includes(
+      normalized
+    )
+  ) {
+    return "FAILED";
+  }
+
+  return normalized;
+};
+
 const isSoftFailedShortsStatus = (status: string, message: string) => {
   if (status !== "FAILED") return false;
   return !message || isRetryableShortsMessage(message);
@@ -589,7 +629,7 @@ const formatHistoryTimestamp = (timestamp: number) => {
 };
 
 const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
-  const normalized = (status || "").trim().toUpperCase();
+  const normalized = normalizeClientShortsStatus(status || "");
 
   if (normalized === "COMPLETED") {
     return { color: "#15803d", fontWeight: 700 };
@@ -611,7 +651,7 @@ const getHistoryStatusStyle = (status?: string): React.CSSProperties => {
 };
 
 const getDisplayJobStatusLabel = (status?: string) => {
-  const normalized = (status || "").trim().toUpperCase();
+  const normalized = normalizeClientShortsStatus(status || "");
   if (normalized === "READY_TO_REFRESH") {
     return "Clips ready. Refresh to display.";
   }
@@ -620,7 +660,7 @@ const getDisplayJobStatusLabel = (status?: string) => {
 
 const isRecoverableShortsRefreshState = (message: string, status: string) => {
   const normalizedMessage = (message || "").trim().toLowerCase();
-  const normalizedStatus = (status || "").trim().toUpperCase();
+  const normalizedStatus = normalizeClientShortsStatus(status || "");
 
   return (
     normalizedStatus === "COMPLETED" &&
@@ -635,7 +675,7 @@ const isRecoverableShortsRefreshState = (message: string, status: string) => {
 };
 
 const isTerminalShortsStatus = (status: string) => {
-  const normalized = status.trim().toUpperCase();
+  const normalized = normalizeClientShortsStatus(status);
   return normalized === "COMPLETED" || normalized === "FAILED" || normalized === "READY_TO_REFRESH";
 };
 
@@ -1774,6 +1814,109 @@ export default function Page() {
     throw new Error(lastResultsError || "ShortsGen completed, but no clips were returned.");
   }, []);
 
+  const applyCompletedShortsJob = useCallback(
+    ({
+      workspaceId,
+      jobId,
+      sourceUrl,
+      mode,
+      rangeStart,
+      rangeEnd,
+      createdAt,
+      clips,
+    }: {
+      workspaceId: string;
+      jobId: string;
+      sourceUrl: string;
+      mode: ShortsGenerationMode;
+      rangeStart: string;
+      rangeEnd: string;
+      createdAt: number;
+      clips: ShortsClipOption[];
+    }) => {
+      const preselectedIds = clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id);
+      const successMessage =
+        `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`;
+
+      updateShortsWorkspace(workspaceId, {
+        clips: clips.slice(0, Math.min(2, clips.length)),
+        jobProgress: 100,
+        jobStatus: "COMPLETED",
+        generatingShorts: false,
+        errorMessage: "",
+      });
+      window.setTimeout(() => {
+        updateShortsWorkspace(workspaceId, {
+          clips,
+          selectedShortIds: preselectedIds,
+          successMessage,
+        });
+      }, 80);
+
+      persistShortsHistoryEntry({
+        workspaceId,
+        jobId,
+        sourceUrl,
+        mode,
+        rangeStart,
+        rangeEnd,
+        status: "COMPLETED",
+        progress: 100,
+        clips,
+        selectedShortIds: preselectedIds,
+        uploadedClipIds: [],
+        createdAt,
+        updatedAt: Date.now(),
+        successMessage,
+        errorMessage: "",
+      });
+    },
+    [persistShortsHistoryEntry, updateShortsWorkspace]
+  );
+
+  const tryResolveCompletedShortsJob = useCallback(
+    async ({
+      workspaceId,
+      jobId,
+      sourceUrl,
+      mode,
+      rangeStart,
+      rangeEnd,
+      createdAt,
+    }: {
+      workspaceId: string;
+      jobId: string;
+      sourceUrl: string;
+      mode: ShortsGenerationMode;
+      rangeStart: string;
+      rangeEnd: string;
+      createdAt: number;
+    }) => {
+      try {
+        const clips = await fetchShortsResultsForJob(jobId);
+
+        if (!clips.length) {
+          return false;
+        }
+
+        applyCompletedShortsJob({
+          workspaceId,
+          jobId,
+          sourceUrl,
+          mode,
+          rangeStart,
+          rangeEnd,
+          createdAt,
+          clips,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [applyCompletedShortsJob, fetchShortsResultsForJob]
+  );
+
   const monitorShortsJob = useCallback(
     async ({
       workspaceId,
@@ -1842,6 +1985,22 @@ export default function Page() {
           }
 
           if (!statusRes || !statusRes.ok) {
+            if (
+              await tryResolveCompletedShortsJob({
+                workspaceId,
+                jobId,
+                sourceUrl,
+                mode,
+                rangeStart,
+                rangeEnd,
+                createdAt,
+              })
+            ) {
+              finalStatus = "COMPLETED";
+              latestProgress = 100;
+              return;
+            }
+
             if (isRetryableShortsMessage(lastStatusError) && attempt < maxPollAttempts - 1) {
               await sleep(getPollDelayMs(attempt));
               continue;
@@ -1849,7 +2008,7 @@ export default function Page() {
             throw new Error(lastStatusError || "Failed to check ShortsGen job status.");
           }
 
-          finalStatus = pickFirstString(statusData?.status).toUpperCase();
+          finalStatus = normalizeClientShortsStatus(pickFirstString(statusData?.status));
           const explicitProgressRaw =
             typeof statusData?.progress === "number" ||
             typeof statusData?.progress === "string"
@@ -1910,7 +2069,9 @@ export default function Page() {
                 if (!confirmRes.ok) {
                   continue;
                 }
-                const confirmStatus = pickFirstString(confirmData?.status).toUpperCase();
+                const confirmStatus = normalizeClientShortsStatus(
+                  pickFirstString(confirmData?.status)
+                );
                 const confirmProgressRaw =
                   typeof confirmData?.progress === "number" || typeof confirmData?.progress === "string"
                     ? Number(confirmData.progress)
@@ -1971,6 +2132,22 @@ export default function Page() {
               continue;
             }
 
+            if (
+              await tryResolveCompletedShortsJob({
+                workspaceId,
+                jobId,
+                sourceUrl,
+                mode,
+                rangeStart,
+                rangeEnd,
+                createdAt,
+              })
+            ) {
+              finalStatus = "COMPLETED";
+              latestProgress = 100;
+              return;
+            }
+
             throw new Error(failedMessage || "Shorts generation failed.");
           }
 
@@ -1978,6 +2155,20 @@ export default function Page() {
         }
 
         if (finalStatus !== "COMPLETED") {
+          if (
+            await tryResolveCompletedShortsJob({
+              workspaceId,
+              jobId,
+              sourceUrl,
+              mode,
+              rangeStart,
+              rangeEnd,
+              createdAt,
+            })
+          ) {
+            return;
+          }
+
           throw new Error(
             isFullVideoAiClipping
               ? "ShortsGen is still processing this full video on the upstream server. Full-video jobs can take a long time. Please wait a bit longer or use First 2 / 3 / 5 min for faster results."
@@ -1986,40 +2177,15 @@ export default function Page() {
         }
 
         const clips = await fetchShortsResultsForJob(jobId);
-        const preselectedIds = clips.slice(0, Math.min(3, clips.length)).map((clip) => clip.id);
-        updateShortsWorkspace(workspaceId, {
-          clips: clips.slice(0, Math.min(2, clips.length)),
-          jobProgress: 100,
-          jobStatus: "COMPLETED",
-          generatingShorts: false,
-          errorMessage: "",
-        });
-        window.setTimeout(() => {
-          updateShortsWorkspace(workspaceId, {
-            clips,
-            selectedShortIds: preselectedIds,
-            successMessage:
-              `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`,
-          });
-        }, 80);
-
-        persistShortsHistoryEntry({
+        applyCompletedShortsJob({
           workspaceId,
           jobId,
           sourceUrl,
           mode,
           rangeStart,
           rangeEnd,
-          status: "COMPLETED",
-          progress: 100,
-          clips,
-          selectedShortIds: preselectedIds,
-          uploadedClipIds: [],
           createdAt,
-          updatedAt: Date.now(),
-          successMessage:
-            `${clips.length} short(s) are ready. The strongest clips are pre-selected so you can download them or add them to the upload list.`,
-          errorMessage: "",
+          clips,
         });
       } catch (err: any) {
         const message = err?.message || "Failed to prepare the shorts preview.";
@@ -2079,7 +2245,13 @@ export default function Page() {
         });
       }
     },
-    [fetchShortsResultsForJob, persistShortsHistoryEntry, updateShortsWorkspace]
+    [
+      applyCompletedShortsJob,
+      fetchShortsResultsForJob,
+      persistShortsHistoryEntry,
+      tryResolveCompletedShortsJob,
+      updateShortsWorkspace,
+    ]
   );
 
   useEffect(() => {
@@ -2107,7 +2279,7 @@ export default function Page() {
 
     if (!entry.jobId) return;
 
-    if (String(entry.status || "").toUpperCase() === "COMPLETED") {
+    if (normalizeClientShortsStatus(String(entry.status || "")) === "COMPLETED") {
       if (Array.isArray(entry.clips) && entry.clips.length) return;
 
       try {
@@ -3571,9 +3743,12 @@ const generateViralClipText = useCallback(
                               {(item.originalUrl || item.videoTitle) ? (
                                 <div style={styles.shortLinkHistoryMetaRow}>
                                   {item.originalUrl ? (
-                                    <div style={{ ...styles.shortLinkHistoryOrigin, flex: 1 }}>
+                                    <div style={styles.shortLinkHistoryOriginInline}>
                                       {item.originalUrl}
                                     </div>
+                                  ) : null}
+                                  {item.originalUrl && item.videoTitle ? (
+                                    <span style={styles.shortLinkHistorySeparator}>｜</span>
                                   ) : null}
                                   {item.videoTitle ? (
                                     <div style={styles.shortLinkHistoryVideoTitleInline}>
@@ -5486,11 +5661,9 @@ const styles: Record<string, React.CSSProperties> = {
   shortLinkHistoryMetaRow: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
+    gap: 8,
     flexWrap: "wrap",
-    marginTop: 6,
-    paddingTop: 6,
-    borderTop: "1px solid #edf3fb",
+    marginTop: 4,
   },
   shortLinkHistoryVideoTitle: {
     fontSize: 12,
@@ -5503,12 +5676,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#43556d",
     lineHeight: 1.5,
     wordBreak: "break-word",
-    whiteSpace: "nowrap",
-    maxWidth: "40%",
+    flex: "1 1 280px",
+    minWidth: 0,
     overflow: "hidden",
     textOverflow: "ellipsis",
     fontWeight: 700,
-    paddingLeft: 12,
-    borderLeft: "1px solid #dde7f5",
+  },
+  shortLinkHistoryOriginInline: {
+    fontSize: 12,
+    color: "#607086",
+    lineHeight: 1.5,
+    wordBreak: "break-all",
+    flex: "0 1 auto",
+    minWidth: 0,
+  },
+  shortLinkHistorySeparator: {
+    fontSize: 12,
+    color: "#9aa8bc",
+    lineHeight: 1.5,
+    fontWeight: 700,
+    flexShrink: 0,
   },
 };
