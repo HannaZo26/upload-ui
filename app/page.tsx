@@ -988,6 +988,7 @@ export default function Page() {
     useState<string>(SHORTS_WORKSPACE_CONFIG[0]?.workspaceId || "workspace-1");
   const [shortsHistory, setShortsHistory] = useState<SavedShortsHistoryEntry[]>([]);
   const [shortLinkHistory, setShortLinkHistory] = useState<ShortLinkHistoryEntry[]>([]);
+  const [shortLinkHistoryCollapsed, setShortLinkHistoryCollapsed] = useState(true);
 
   const [okurlProjects, setOkurlProjects] = useState<OkurlProjectOption[]>([]);
   const [okurlDomains, setOkurlDomains] = useState<OkurlDomainOption[]>([]);
@@ -3062,14 +3063,14 @@ const generateViralClipText = useCallback(
     }));
   };
 
-  const buildWorkspaceTxtContent = (description: string, facebookComment: string) => {
+  const buildWorkspaceTxtContent = (description: string, socialComment: string) => {
     const trimmedDescription = description.trim();
-    const trimmedComment = facebookComment.trim();
+    const trimmedComment = socialComment.trim();
 
     if (!trimmedDescription) return "";
     if (!trimmedComment) return trimmedDescription;
 
-    return `${trimmedDescription}\n\n[FB_COMMENT]\n${trimmedComment}`;
+    return `${trimmedDescription}\n\n[SOCIAL_COMMENT]\n${trimmedComment}`;
   };
 
   const addGeneratedTxtsToUploadList = (workspaceId: string) => {
@@ -3132,7 +3133,7 @@ const generateViralClipText = useCallback(
     }));
   };
 
-  const updateWorkspaceFacebookComment = (workspaceId: string, value: string) => {
+  const updateWorkspaceSocialComment = (workspaceId: string, value: string) => {
     updateShortsWorkspace(workspaceId, {
       facebookComment: value,
     });
@@ -3904,50 +3905,70 @@ const generateViralClipText = useCallback(
                   </div>
 
                   <div style={{ ...styles.shortLinkHistoryCard, marginTop: 20 }}>
-                    <div style={styles.actionTitle}>
-                      {tx("Recent short links", "最近生成的短鏈接")}
+                    <div style={styles.shortLinkHistoryHeader}>
+                      <div style={styles.actionTitle}>
+                        {tx("Recent short links", "最近生成的短鏈接")}
+                      </div>
+                      <button
+                        type="button"
+                        style={styles.secondaryButton}
+                        onClick={() => setShortLinkHistoryCollapsed((prev) => !prev)}
+                      >
+                        {shortLinkHistoryCollapsed
+                          ? tx("Expand", "展開")
+                          : tx("Collapse", "收起")}
+                      </button>
                     </div>
                     {shortLinkHistory.length ? (
-                      <div style={styles.shortLinkHistoryListWide}>
-                        {shortLinkHistory.map((item, index) => (
-                          <div
-                            key={`${item.shortUrl}-${index}`}
-                            style={{
-                              ...styles.shortLinkHistoryWideRow,
-                              paddingBottom: index < shortLinkHistory.length - 1 ? 12 : 0,
-                              marginBottom: index < shortLinkHistory.length - 1 ? 12 : 0,
-                              borderBottom:
-                                index < shortLinkHistory.length - 1
-                                  ? "1px dashed #d9e4f3"
-                                  : "none",
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div style={styles.shortLinkHistoryProject}>
-                                {item.projectName || tx("Unknown project", "未命名項目")}
-                              </div>
-                              <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
-                              {(item.originalUrl || item.videoTitle) ? (
-                                <div style={styles.shortLinkHistoryMetaRow}>
-                                  {item.originalUrl ? (
-                                    <div style={styles.shortLinkHistoryOriginInline}>
-                                      {item.originalUrl}
-                                    </div>
-                                  ) : null}
-                                  {item.originalUrl && item.videoTitle ? (
-                                    <span style={styles.shortLinkHistorySeparator}>｜</span>
-                                  ) : null}
-                                  {item.videoTitle ? (
-                                    <div style={styles.shortLinkHistoryVideoTitleInline}>
-                                      {item.videoTitle}
-                                    </div>
-                                  ) : null}
+                      shortLinkHistoryCollapsed ? (
+                        <div style={styles.helperText}>
+                          {tx(
+                            `Collapsed · ${shortLinkHistory.length} recent short link(s). Click Expand to view.`,
+                            `已收起 · 共 ${shortLinkHistory.length} 筆短鏈接，點擊展開查看。`
+                          )}
+                        </div>
+                      ) : (
+                        <div style={styles.shortLinkHistoryListWide}>
+                          {shortLinkHistory.map((item, index) => (
+                            <div
+                              key={`${item.shortUrl}-${index}`}
+                              style={{
+                                ...styles.shortLinkHistoryWideRow,
+                                paddingBottom: index < shortLinkHistory.length - 1 ? 12 : 0,
+                                marginBottom: index < shortLinkHistory.length - 1 ? 12 : 0,
+                                borderBottom:
+                                  index < shortLinkHistory.length - 1
+                                    ? "1px dashed #d9e4f3"
+                                    : "none",
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={styles.shortLinkHistoryProject}>
+                                  {item.projectName || tx("Unknown project", "未命名項目")}
                                 </div>
-                              ) : null}
+                                <div style={styles.shortLinkHistoryUrl}>{item.shortUrl}</div>
+                                {(item.originalUrl || item.videoTitle) ? (
+                                  <div style={styles.shortLinkHistoryMetaRow}>
+                                    {item.originalUrl ? (
+                                      <div style={styles.shortLinkHistoryOriginInline}>
+                                        {item.originalUrl}
+                                      </div>
+                                    ) : null}
+                                    {item.originalUrl && item.videoTitle ? (
+                                      <span style={styles.shortLinkHistorySeparator}>｜</span>
+                                    ) : null}
+                                    {item.videoTitle ? (
+                                      <div style={styles.shortLinkHistoryVideoTitleInline}>
+                                        {item.videoTitle}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )
                     ) : (
                       <div style={styles.helperText}>
                         {tx(
@@ -4319,8 +4340,8 @@ const generateViralClipText = useCallback(
                                         <div style={styles.actionTitle}>{tx("TXT generator", "文本生成器")}</div>
                                         <div style={styles.helperText}>
                                           {tx(
-                                            "Copy or edit title and description here, then add them to Upload files.",
-                                            "可在這裡複製或編輯標題與描述，之後再加入上傳文件。"
+                                            "Copy or edit title and description here. Social comment is managed separately below and will be auto-added as [SOCIAL_COMMENT].",
+                                            "可在這裡複製或編輯標題與描述。Social comment 會在下方單獨管理，並自動以 [SOCIAL_COMMENT] 加入 TXT。"
                                           )}
                                         </div>
                                       </div>
@@ -4344,23 +4365,34 @@ const generateViralClipText = useCallback(
                                       ))}
                                     </div>
 
-                                    <div style={{ marginTop: 10, marginBottom: 6 }}>
-                                      <label style={styles.label}>
-                                        {tx("Facebook comment", "Facebook comment")}
-                                      </label>
+                                    <div style={styles.socialCommentCard}>
+                                      <div style={styles.socialCommentHeader}>
+                                        <div>
+                                          <div style={styles.socialCommentTitle}>
+                                            {tx("Social comment", "Social comment")}
+                                          </div>
+                                          <div style={styles.socialCommentHelper}>
+                                            {tx(
+                                              "This block is not title and description. It will be appended to every TXT automatically as [SOCIAL_COMMENT].",
+                                              "這一塊不是 title 和 description。加入 TXT 時會自動以 [SOCIAL_COMMENT] 附加到每個 TXT 裡。"
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div style={styles.socialCommentTag}>[SOCIAL_COMMENT]</div>
+                                      </div>
                                       <textarea
-                                        rows={1}
-                                        style={workspaceCommentInputStyle}
+                                        rows={3}
+                                        style={styles.socialCommentTextarea}
                                         value={workspace.facebookComment}
                                         onChange={(e) =>
-                                          updateWorkspaceFacebookComment(
+                                          updateWorkspaceSocialComment(
                                             workspace.workspaceId,
                                             e.target.value
                                           )
                                         }
                                         placeholder={tx(
-                                          "Auto-comment to post from this Facebook Page",
-                                          "輸入此工作區這批 clips 要自動發布的 FB 留言"
+                                          "Enter one social comment to post to both FB Reel and YT Shorts",
+                                          "輸入一段會同時發到 FB Reel 和 YT Shorts 的 social comment"
                                         )}
                                       />
                                     </div>
@@ -5866,6 +5898,67 @@ const styles: Record<string, React.CSSProperties> = {
   summaryBreak: {
     textAlign: "right",
     wordBreak: "break-all",
+  },
+
+
+  shortLinkHistoryHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  socialCommentCard: {
+    marginTop: 10,
+    marginBottom: 6,
+    borderRadius: 16,
+    border: "1px solid #ffd3aa",
+    background: "linear-gradient(180deg, #fff3e6 0%, #fff9f2 100%)",
+    padding: 14,
+    display: "grid",
+    gap: 12,
+  },
+  socialCommentHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  socialCommentTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: "#9a4f05",
+    marginBottom: 4,
+  },
+  socialCommentHelper: {
+    fontSize: 12,
+    lineHeight: 1.6,
+    color: "#8a5a2b",
+    maxWidth: 560,
+  },
+  socialCommentTag: {
+    borderRadius: 999,
+    padding: "6px 10px",
+    background: "#ffead1",
+    color: "#b86407",
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+    border: "1px solid #ffd3aa",
+  },
+  socialCommentTextarea: {
+    width: "100%",
+    minHeight: 76,
+    borderRadius: 12,
+    border: "1px solid #f0c191",
+    padding: "12px 14px",
+    fontSize: 14,
+    lineHeight: 1.45,
+    outline: "none",
+    background: "#ffffff",
+    resize: "vertical" as const,
+    boxSizing: "border-box",
   },
 
   shortLinkHistoryCard: {
