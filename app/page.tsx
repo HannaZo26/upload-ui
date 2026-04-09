@@ -762,7 +762,8 @@ const uploadFilesToCloudflare = async (input: {
 
   const uploadedFiles: CloudflareUploadPlanFile[] = [];
 
-  for (const [index, plannedFile] of input.uploadSession.files.entries()) {
+  for (let index = 0; index < input.uploadSession.files.length; index += 1) {
+    const plannedFile = input.uploadSession.files[index];
     const localFile = localFileMap.get(plannedFile.clientId);
 
     if (!localFile) {
@@ -3364,9 +3365,7 @@ const generateViralClipText = useCallback(
 
       if (!submitRes.ok) {
         throw new Error(
-          submitData?.error ||
-            submitData?.message ||
-            `Upload failed (${submitRes.status})`
+          submitData?.error || submitData?.message || `Upload failed (${submitRes.status})`
         );
       }
 
@@ -4568,8 +4567,8 @@ const generateViralClipText = useCallback(
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Upload the video and matching TXT files here. They will be sent directly to the current automation workflow.",
-                      "請在這裡上傳影片和對應的 TXT 文件。它們會直接送進目前的自動化流程。"
+                      "Upload the video and matching TXT files here. The selected files will be sent directly to the current automation workflow.",
+                      "請在這裡上傳影片和對應的 TXT 文件。所選的文件會直接送到目前的自動化流程。"
                     )}
                   </div>
 
