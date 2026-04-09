@@ -129,6 +129,7 @@ type ShortsWorkspaceState = {
   errorMessage: string;
   copiedClipActionKey: string;
   txtDescriptions: string[];
+  facebookComment: string;
   addingTxtsToUploads: boolean;
   txtsAddedToUploads: boolean;
   jobId: string;
@@ -930,6 +931,7 @@ const createInitialShortsWorkspaceState = (
   errorMessage: "",
   copiedClipActionKey: "",
   txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
+  facebookComment: "",
   addingTxtsToUploads: false,
   txtsAddedToUploads: false,
   jobId: "",
@@ -3060,6 +3062,16 @@ const generateViralClipText = useCallback(
     }));
   };
 
+  const buildWorkspaceTxtContent = (description: string, facebookComment: string) => {
+    const trimmedDescription = description.trim();
+    const trimmedComment = facebookComment.trim();
+
+    if (!trimmedDescription) return "";
+    if (!trimmedComment) return trimmedDescription;
+
+    return `${trimmedDescription}\n\n[FB_COMMENT]\n${trimmedComment}`;
+  };
+
   const addGeneratedTxtsToUploadList = (workspaceId: string) => {
     setError("");
     setSuccess("");
@@ -3070,7 +3082,7 @@ const generateViralClipText = useCallback(
     const populatedEntries = workspace.txtDescriptions
       .map((value, index) => ({
         fileName: buildSequentialFileName(index, "txt"),
-        content: value.trim(),
+        content: buildWorkspaceTxtContent(value, workspace.facebookComment),
       }))
       .filter((item) => item.content);
 
@@ -3097,6 +3109,7 @@ const generateViralClipText = useCallback(
 
       updateShortsWorkspace(workspaceId, {
         txtDescriptions: Array.from({ length: TXT_BOX_COUNT }, () => ""),
+        facebookComment: "",
         txtsAddedToUploads: true,
       });
       window.setTimeout(() => {
@@ -3119,6 +3132,12 @@ const generateViralClipText = useCallback(
     }));
   };
 
+  const updateWorkspaceFacebookComment = (workspaceId: string, value: string) => {
+    updateShortsWorkspace(workspaceId, {
+      facebookComment: value,
+    });
+  };
+
   const downloadTxt = (workspaceId: string) => {
     const workspace = shortsWorkspaces.find((item) => item.workspaceId === workspaceId);
     if (!workspace) return;
@@ -3126,7 +3145,7 @@ const generateViralClipText = useCallback(
     const populatedEntries = workspace.txtDescriptions
       .map((value, index) => ({
         fileName: `video${index + 1}.txt`,
-        content: value.trim(),
+        content: buildWorkspaceTxtContent(value, workspace.facebookComment),
       }))
       .filter((item) => item.content);
 
@@ -3365,7 +3384,9 @@ const generateViralClipText = useCallback(
 
       if (!submitRes.ok) {
         throw new Error(
-          submitData?.error || submitData?.message || `Upload failed (${submitRes.status})`
+          submitData?.error ||
+            submitData?.message ||
+            `Upload failed (${submitRes.status})`
         );
       }
 
@@ -3438,6 +3459,9 @@ const generateViralClipText = useCallback(
   const workspaceTxtTextareaStyle = isMobile
     ? { ...styles.workspaceTxtTextarea, minHeight: 72, fontSize: 14 }
     : styles.workspaceTxtTextarea;
+  const workspaceCommentInputStyle = isMobile
+    ? { ...styles.workspaceCommentInput, minHeight: 44, fontSize: 14 }
+    : styles.workspaceCommentInput;
   const primaryButtonStyle = isMobile
     ? { ...styles.primaryButton, width: "100%", justifyContent: "center" }
     : styles.primaryButton;
@@ -4320,14 +4344,28 @@ const generateViralClipText = useCallback(
                                       ))}
                                     </div>
 
+                                    <div style={{ marginTop: 10, marginBottom: 6 }}>
+                                      <label style={styles.label}>
+                                        {tx("Facebook comment", "Facebook comment")}
+                                      </label>
+                                      <textarea
+                                        rows={1}
+                                        style={workspaceCommentInputStyle}
+                                        value={workspace.facebookComment}
+                                        onChange={(e) =>
+                                          updateWorkspaceFacebookComment(
+                                            workspace.workspaceId,
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder={tx(
+                                          "Auto-comment to post from this Facebook Page",
+                                          "輸入此工作區這批 clips 要自動發布的 FB 留言"
+                                        )}
+                                      />
+                                    </div>
+
                                     <div style={styles.inlineActions}>
-                                      <button
-                                        type="button"
-                                        style={secondaryButtonStyle}
-                                        onClick={() => downloadTxt(workspace.workspaceId)}
-                                      >
-                                        {tx("Download all TXT files", "下載全部 TXT 文件")}
-                                      </button>
                                       <button
                                         type="button"
                                         style={{
@@ -4341,6 +4379,13 @@ const generateViralClipText = useCallback(
                                         {workspace.addingTxtsToUploads
                                           ? tx("Adding TXT...", "正在加入 TXT...")
                                           : tx("Add TXT to Upload files", "加入 TXT 到上傳文件")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        style={secondaryButtonStyle}
+                                        onClick={() => downloadTxt(workspace.workspaceId)}
+                                      >
+                                        {tx("Download all TXT files", "下載全部 TXT 文件")}
                                       </button>
                                       {workspace.txtsAddedToUploads ? (
                                         <span style={styles.copiedText}>{tx("Added ✓", "已加入 ✓")}</span>
@@ -4567,8 +4612,8 @@ const generateViralClipText = useCallback(
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Upload the video and matching TXT files here. The selected files will be sent directly to the current automation workflow.",
-                      "請在這裡上傳影片和對應的 TXT 文件。所選的文件會直接送到目前的自動化流程。"
+                      "Upload the video and matching TXT files here. They will be sent directly to the current automation workflow.",
+                      "請在這裡上傳影片和對應的 TXT 文件。它們會直接送進目前的自動化流程。"
                     )}
                   </div>
 
@@ -5415,6 +5460,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "13px 14px",
     fontSize: 15,
     lineHeight: 1.45,
+    outline: "none",
+    background: "#fbfdff",
+    resize: "vertical" as const,
+    boxSizing: "border-box",
+  },
+  workspaceCommentInput: {
+    width: "100%",
+    minHeight: 42,
+    borderRadius: 12,
+    border: "1px solid #cfdef2",
+    padding: "11px 14px",
+    fontSize: 14,
+    lineHeight: 1.35,
     outline: "none",
     background: "#fbfdff",
     resize: "vertical" as const,
