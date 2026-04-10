@@ -3793,7 +3793,6 @@ const generateViralClipText = useCallback(
 
                     <div style={styles.utmBuilderCard}>
                       <div style={styles.utmBuilderHeader}>
-                        <div />
                         <div style={styles.utmBuilderBadge}>
                           {selectedUtmTemplate?.label || "Auto"}
                         </div>
@@ -4789,7 +4788,7 @@ const generateViralClipText = useCallback(
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then activate the automation. The selected files will be uploaded directly to the current automatic workflow. Please keep this page open until you see Activated Successfully.",
+                      "Review the current summary, then activate the automation. The selected files will be uploaded directly to the current automation workflow. Please keep this page open until you see Activated Successfully.",
                       "檢查目前摘要後再開啟自動化。選擇的文件會直接上傳到目前的自動化流程。請不要關閉此頁面，直到看到 Activated Successfully。"
                     )}
                   </div>
@@ -5162,7 +5161,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   utmBuilderHeader: {
     display: "flex",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
     gap: 12,
   },
