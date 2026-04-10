@@ -3348,6 +3348,7 @@ const generateViralClipText = useCallback(
       formData.append("folder_name", effectiveFolderName);
       formData.append("facebook_page", pageName);
       formData.append("x_account", mirroredPlatformName);
+      formData.append("ganjingworld_channel", mirroredPlatformName);
       formData.append("youtube_account", mirroredPlatformName);
       formData.append("tiktok_account", mirroredPlatformName);
       formData.append("title", videoTitle.trim());
@@ -3396,7 +3397,7 @@ const generateViralClipText = useCallback(
       setSuccess(
         tx(
           submitData?.message || "Activated Successfully",
-          submitData?.message || "Activated Successfully"
+          submitData?.message || "已成功啟動自動化，表單內容已清空。"
         )
       );
       setError("");
@@ -3633,7 +3634,16 @@ const generateViralClipText = useCallback(
                     </div>
 
                     <div>
-                      <label style={styles.label}>YouTube Account</label>
+                      <label style={styles.label}>Gan Jing World Channel</label>
+                      <input
+                        style={styles.inputReadonly}
+                        value={mirroredPlatformName || "Choose FB first"}
+                        readOnly
+                      />
+                    </div>
+
+                    <div>
+                      <label style={styles.label}>YouTube Channel</label>
                       <input
                         style={styles.inputReadonly}
                         value={mirroredPlatformName || "Choose FB first"}
@@ -3783,7 +3793,8 @@ const generateViralClipText = useCallback(
 
                     <div style={styles.utmBuilderCard}>
                       <div style={styles.utmBuilderHeader}>
-                                                <div style={styles.utmBuilderBadge}>
+                        <div />
+                        <div style={styles.utmBuilderBadge}>
                           {selectedUtmTemplate?.label || "Auto"}
                         </div>
                       </div>
@@ -4337,12 +4348,6 @@ const generateViralClipText = useCallback(
                                     <div style={styles.workspaceTxtHeaderRow}>
                                       <div>
                                         <div style={styles.actionTitle}>{tx("TXT Generator", "文本生成器")}</div>
-                                        <div style={styles.helperText}>
-                                          {tx(
-                                            "Copy or edit title and description here. Social comment is managed separately below and will be auto-added as [SOCIAL_COMMENT].",
-                                            "可在這裡複製或編輯標題與描述。Social comment 會在下方單獨管理，並自動以 [SOCIAL_COMMENT] 加入 TXT。"
-                                          )}
-                                        </div>
                                       </div>
                                     </div>
 
@@ -4351,7 +4356,7 @@ const generateViralClipText = useCallback(
                                         <div key={`${workspace.workspaceId}-txt-${index}`} style={styles.workspaceTxtCard}>
                                           <label style={styles.label}>{tx("Title and Description", "Title and Description")}</label>
                                           <textarea
-                                            rows={3}
+                                            rows={2}
                                             style={workspaceTxtTextareaStyle}
                                             value={value}
                                             onChange={(e) => updateTxtDescription(workspace.workspaceId, index, e.target.value)}
@@ -4370,13 +4375,7 @@ const generateViralClipText = useCallback(
                                           <div style={styles.socialCommentTitle}>
                                             {tx("Social Comment", "Social Comment")}
                                           </div>
-                                          <div style={styles.socialCommentHelper}>
-                                            {tx(
-                                              "Write your social comment.",
-                                              "Write your social comment."
-                                            )}
-                                          </div>
-                                        </div>
+</div>
                                       </div>
                                       <textarea
                                         rows={2}
@@ -4388,10 +4387,7 @@ const generateViralClipText = useCallback(
                                             e.target.value
                                           )
                                         }
-                                        placeholder={tx(
-                                          "Enter your social comment here",
-                                          "Enter your social comment here"
-                                        )}
+                                        placeholder="Enter your social comment here"
                                       />
                                     </div>
 
@@ -4793,8 +4789,8 @@ const generateViralClipText = useCallback(
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then activate the automation. The selected files will be uploaded directly to the current n8n workflow. Please keep this page open until you see Activated Successfully.",
-                      "檢查目前摘要後再開啟自動化。選擇的文件會直接上傳到目前的 n8n 自動化流程。請不要關閉此頁面，直到看到 自動化已開啟成功 才算完成。"
+                      "Review the current summary, then activate the automation. The selected files will be uploaded directly to the current automatic workflow. Please keep this page open until you see Activated Successfully.",
+                      "檢查目前摘要後再開啟自動化。選擇的文件會直接上傳到目前的自動化流程。請不要關閉此頁面，直到看到 Activated Successfully。"
                     )}
                   </div>
 
@@ -4809,7 +4805,11 @@ const generateViralClipText = useCallback(
                       <strong>{mirroredPlatformName || "Choose FB first"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
-                      <span>YouTube Account</span>
+                      <span>Gan Jing World Channel</span>
+                      <strong>{mirroredPlatformName || "Choose FB first"}</strong>
+                    </div>
+                    <div style={styles.summaryRow}>
+                      <span>YouTube Channel</span>
                       <strong>{mirroredPlatformName || "Choose FB first"}</strong>
                     </div>
                     <div style={styles.summaryRow}>
@@ -5947,7 +5947,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   socialCommentTextarea: {
     width: "100%",
-    minHeight: 56,
+    minHeight: 52,
     borderRadius: 12,
     border: "1px solid #f0c191",
     padding: "12px 14px",
