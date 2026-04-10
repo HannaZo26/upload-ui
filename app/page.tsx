@@ -168,7 +168,7 @@ const TABLET_BREAKPOINT = 1080;
 const WORKFLOW_STEPS = [
   "Choose social platform destinations",
   "Generate the short link",
-  "Generate shorts, TXT, and review",
+  "Generate Shorts, TXT, and review",
   "Upload the mp4 and matching txt",
   "Review the summary and start automation",
 ];
@@ -3338,7 +3338,7 @@ const generateViralClipText = useCallback(
       setActivatedSuccessfully(false);
       setSuccess(
         tx(
-          "Uploading files to automation... Please keep this page open until Activated successfully appears.",
+          "Uploading files to automation... Please keep this page open until Activated Successfully appears.",
           "正在把檔案上傳到自動化流程……請保持此頁面開啟，直到出現自動化已開啟成功。"
         )
       );
@@ -3395,8 +3395,8 @@ const generateViralClipText = useCallback(
       setActivatedSuccessfully(true);
       setSuccess(
         tx(
-          submitData?.message || "Automation started successfully. Form has been cleared.",
-          submitData?.message || "已成功啟動自動化，表單內容已清空。"
+          submitData?.message || "Activated Successfully",
+          submitData?.message || "Activated Successfully"
         )
       );
       setError("");
@@ -3599,7 +3599,7 @@ const generateViralClipText = useCallback(
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 1</div>
-                      <div style={styles.panelTitle}>{tx("Social platforms", "社交媒體平台")}</div>
+                      <div style={styles.panelTitle}>{tx("Social Platforms", "社交媒體平台")}</div>
                     </div>
                   </div>
 
@@ -3656,7 +3656,7 @@ const generateViralClipText = useCallback(
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>Step 2</div>
-                      <div style={styles.panelTitle}>{tx("Short link generator", "短鏈接生成器")}</div>
+                      <div style={styles.panelTitle}>{tx("Short Link Generator", "短鏈接生成器")}</div>
                     </div>
                   </div>
 
@@ -3746,7 +3746,7 @@ const generateViralClipText = useCallback(
                           onClick={generateShortUrl}
                           disabled={creatingShortUrl}
                         >
-                          {creatingShortUrl ? "Generating..." : "Generate Short URL"}
+                          {creatingShortUrl ? "Generating..." : "Generate Short Link"}
                         </button>
                         {shortUrlSuccess ? (
                           <span style={styles.copiedText}>{shortUrlSuccess}</span>
@@ -3783,8 +3783,7 @@ const generateViralClipText = useCallback(
 
                     <div style={styles.utmBuilderCard}>
                       <div style={styles.utmBuilderHeader}>
-                        <div style={styles.utmBuilderTitle}>UTM Builder</div>
-                        <div style={styles.utmBuilderBadge}>
+                                                <div style={styles.utmBuilderBadge}>
                           {selectedUtmTemplate?.label || "Auto"}
                         </div>
                       </div>
@@ -3984,7 +3983,7 @@ const generateViralClipText = useCallback(
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>{tx("Step 3", "第 3 步")}</div>
-                      <div style={styles.panelTitle}>{tx("Shorts generator", "Shorts 生成器")}</div>
+                      <div style={styles.panelTitle}>{tx("Shorts Generator", "Shorts 生成器")}</div>
                     </div>
                   </div>
 
@@ -4020,7 +4019,7 @@ const generateViralClipText = useCallback(
                         ? tx("Checking...", "檢查中...")
                         : workspaceHasPendingJob
                         ? tx("Resume checking", "恢復檢查")
-                        : tx("Generate shorts", "生成 shorts");
+                        : tx("Generate Shorts", "生成 shorts");
 
                       return (
                         <div
@@ -4337,7 +4336,7 @@ const generateViralClipText = useCallback(
                                   <div style={workspaceTxtSectionStyle}>
                                     <div style={styles.workspaceTxtHeaderRow}>
                                       <div>
-                                        <div style={styles.actionTitle}>{tx("TXT generator", "文本生成器")}</div>
+                                        <div style={styles.actionTitle}>{tx("TXT Generator", "文本生成器")}</div>
                                         <div style={styles.helperText}>
                                           {tx(
                                             "Copy or edit title and description here. Social comment is managed separately below and will be auto-added as [SOCIAL_COMMENT].",
@@ -4350,7 +4349,7 @@ const generateViralClipText = useCallback(
                                     <div style={styles.workspaceTxtGrid}>
                                       {workspace.txtDescriptions.map((value, index) => (
                                         <div key={`${workspace.workspaceId}-txt-${index}`} style={styles.workspaceTxtCard}>
-                                          <label style={styles.label}>{tx("Title and description", "Title and description")}</label>
+                                          <label style={styles.label}>{tx("Title and Description", "Title and Description")}</label>
                                           <textarea
                                             rows={3}
                                             style={workspaceTxtTextareaStyle}
@@ -4369,19 +4368,18 @@ const generateViralClipText = useCallback(
                                       <div style={styles.socialCommentHeader}>
                                         <div>
                                           <div style={styles.socialCommentTitle}>
-                                            {tx("Social comment", "Social comment")}
+                                            {tx("Social Comment", "Social Comment")}
                                           </div>
                                           <div style={styles.socialCommentHelper}>
                                             {tx(
-                                              "This block is not title and description. It will be appended to every TXT automatically as [SOCIAL_COMMENT].",
-                                              "這一塊不是 title 和 description。加入 TXT 時會自動以 [SOCIAL_COMMENT] 附加到每個 TXT 裡。"
+                                              "Write your social comment.",
+                                              "Write your social comment."
                                             )}
                                           </div>
                                         </div>
-                                        <div style={styles.socialCommentTag}>[SOCIAL_COMMENT]</div>
                                       </div>
                                       <textarea
-                                        rows={3}
+                                        rows={2}
                                         style={styles.socialCommentTextarea}
                                         value={workspace.facebookComment}
                                         onChange={(e) =>
@@ -4391,8 +4389,8 @@ const generateViralClipText = useCallback(
                                           )
                                         }
                                         placeholder={tx(
-                                          "Enter one social comment to post to both FB Reel and YT Shorts",
-                                          "輸入一段會同時發到 FB Reel 和 YT Shorts 的 social comment"
+                                          "Enter your social comment here",
+                                          "Enter your social comment here"
                                         )}
                                       />
                                     </div>
@@ -4410,14 +4408,14 @@ const generateViralClipText = useCallback(
                                       >
                                         {workspace.addingTxtsToUploads
                                           ? tx("Adding TXT...", "正在加入 TXT...")
-                                          : tx("Add TXT to Upload files", "加入 TXT 到上傳文件")}
+                                          : tx("Add TXT to Upload Files", "加入 TXT 到上傳文件")}
                                       </button>
                                       <button
                                         type="button"
                                         style={secondaryButtonStyle}
                                         onClick={() => downloadTxt(workspace.workspaceId)}
                                       >
-                                        {tx("Download all TXT files", "下載全部 TXT 文件")}
+                                        {tx("Download All TXT Files", "下載全部 TXT 文件")}
                                       </button>
                                       {workspace.txtsAddedToUploads ? (
                                         <span style={styles.copiedText}>{tx("Added ✓", "已加入 ✓")}</span>
@@ -4579,7 +4577,7 @@ const generateViralClipText = useCallback(
                                         ? "ShortsGen is analyzing the long video and preparing clips..."
                                         : workspaceHasPendingJob
                                         ? "Monitoring paused for this job. Click Resume checking to continue polling the existing ShortsGen job."
-                                        : "Generate shorts in this workspace to preview clip options, compare quality, and choose the best ones to download."}
+                                        : "Generate Shorts in this workspace to preview clip options, compare quality, and choose the best ones to download."}
                                     </div>
                                   )}
 
@@ -4596,7 +4594,7 @@ const generateViralClipText = useCallback(
                                     >
                                       {workspace.addingShortsToUploads
                                         ? "Adding to upload list..."
-                                        : "Add Shorts to Upload files"}
+                                        : "Add Shorts to Upload Files"}
                                     </button>
                                     {workspace.shortsAddedToUploads ? (
                                       <span style={styles.copiedText}>Added</span>
@@ -4613,7 +4611,7 @@ const generateViralClipText = useCallback(
                                     >
                                       {workspace.downloadingShorts
                                         ? "Preparing download..."
-                                        : "Download selected shorts"}
+                                        : "Download Selected Shorts"}
                                     </button>
                                   </div>
 
@@ -4638,7 +4636,7 @@ const generateViralClipText = useCallback(
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>{tx("Step 4", "第 4 步")}</div>
-                      <div style={styles.panelTitle}>{tx("Upload files", "上傳文件")}</div>
+                      <div style={styles.panelTitle}>{tx("Upload Files", "上傳文件")}</div>
                     </div>
                   </div>
 
@@ -4789,13 +4787,13 @@ const generateViralClipText = useCallback(
                   <div style={styles.sectionHeader}>
                     <div>
                       <div style={styles.kicker}>{tx("Step 5", "第 5 步")}</div>
-                      <div style={styles.panelTitle}>{tx("Activate automation", "開啟自動化")}</div>
+                      <div style={styles.panelTitle}>{tx("Activate Automation", "開啟自動化")}</div>
                     </div>
                   </div>
 
                   <div style={styles.panelDesc}>
                     {tx(
-                      "Review the current summary, then activate the automation. The selected files will be uploaded directly to the current n8n workflow. Please keep this page open until you see Activated successfully.",
+                      "Review the current summary, then activate the automation. The selected files will be uploaded directly to the current n8n workflow. Please keep this page open until you see Activated Successfully.",
                       "檢查目前摘要後再開啟自動化。選擇的文件會直接上傳到目前的 n8n 自動化流程。請不要關閉此頁面，直到看到 自動化已開啟成功 才算完成。"
                     )}
                   </div>
@@ -4848,7 +4846,7 @@ const generateViralClipText = useCallback(
                         ? "Demo account cannot activate automation"
                         : submitting
                         ? tx("Uploading files...", "正在上傳文件……")
-                        : tx("Activate automation", "開啟自動化")}
+                        : tx("Activate Automation", "開啟自動化")}
                     </button>
                   </div>
 
@@ -5949,7 +5947,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   socialCommentTextarea: {
     width: "100%",
-    minHeight: 76,
+    minHeight: 56,
     borderRadius: 12,
     border: "1px solid #f0c191",
     padding: "12px 14px",
