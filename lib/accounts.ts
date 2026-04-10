@@ -339,6 +339,28 @@ haiyennt: {
     ],
   },
 
+  stephanie: {
+    password: "PygRcif$193",
+    folders: [
+      "gjwplus",
+      "beyondtheknown",
+      "gjwplussports",
+      "gjwplusdocs",
+      "gjwplusseries",
+      "gjwplusclassics",
+      "gjwpluskids",
+    ],
+    pages: [
+      "gjwplus",
+      "beyondtheknown",
+      "gjwplussports",
+      "gjwplusdocs",
+      "gjwplusseries",
+      "gjwplusclassics",
+      "gjwpluskids",
+    ],
+  },
+  
   ying: {
     password: "HGtYEG$eff@323",
     folders: ["clearviewdaily", "viewscopedaily", "dailytrendpulse"],
@@ -351,8 +373,8 @@ haiyennt: {
     pages: ["everydayvitalityzh", "healthyrhythmdaily"],
   },
 
-  lucywang: {
-    password: "GhyTge#rge@87",
+  weiyu: {
+    password: "KyTgerge87",
     folders: ["horizonupdatesshow", "flashbrieftoday"],
     pages: ["horizonupdatesshow", "flashbrieftoday"],
   },
